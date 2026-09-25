@@ -87,7 +87,7 @@
     llamar: /^ (quiero |necesito |voy a |hay que )?(llama\w*|marca\w*) (a |al |la |el |con )?/,
     contacto: /\b(telefono|fono|celular|numero de (telefono|contacto)|correo|mail|email|direccion|donde queda|ubicacion|contacto de|datos de|ficha de)\b/,
     cotiz: /\b(cotizaciones?( abiertas| pendientes)? (de|del|a|para)|que (le )?(tengo |he )?cotizad\w*|que le cotice)\b/,
-    stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s?\b.*\b(hay|quedan|tenemos)|disponibilidad)\b/,
+    stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
     precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
     visita: /\b(visite|visitamos|estuve (con|en|donde)|fui (a|donde)|pase (a|por|donde)|me reuni|reunion con)\b/,
     prosp: /\b(prospect\w*|nuevo (negocio|cliente|proyecto)|oportunidad|posible (cliente|negocio)|potencial cliente)\b/,
@@ -100,10 +100,16 @@
     if (R.pend.test(n)) return 'pend';
     if (R.llamar.test(n) && !M.leerFecha(t).iso) return 'llamar';           // con fecha es una tarea
     if (/\b(tengo que|hay que|debo|volver a|no olvidar)\b/.test(n)) return 'tarea';
+    // Ventas, facturacion o cobranza no son ni stock ni precio ("cuantas ventas hay hoy"): eso no lo sabe la copia.
+    var ventas = /\b(ventas?|vendid\w*|vendimos|vendio|vendi|factur\w*|cobranza|cobrad\w*)\b/.test(n);
     var orden = ['contacto', 'cotiz', 'stock', 'precio', 'visita', 'prosp', 'tarea'];
-    for (var i = 0; i < orden.length; i++) if (R[orden[i]].test(n)) return orden[i];
+    for (var i = 0; i < orden.length; i++) if (R[orden[i]].test(n) && !(ventas && (orden[i] === 'stock' || orden[i] === 'precio'))) return orden[i];
     if (/ (anota\w*|apunta\w*|nota|registra que|deja (una )?nota) /.test(n)) return 'nota';
-    var pregunta = /\?/.test(t) || /^ (que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|cuando|dame|dime|busca\w*|muestrame) /.test(n);
+    // Humberto (25-09-2026, dos veces): "pregunte algo y se anoto como recordatorio". Una fecha sola
+    // ("hoy", "manana") es recordatorio SOLO si la frase no tiene forma de pregunta ni de pedido de
+    // informacion en ninguna parte; lo demas no se adivina (va a la IA o se dice que no se entendio).
+    var pregunta = /\?/.test(t) || /^ (que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|cuando|dame|dime|busca\w*|muestrame) /.test(n)
+      || /\b(cuanto|cuanta|cuantos|cuantas|cual|cuales|donde|quien|quienes|dame|dime|busca\w*|muestrame|puedes|podrias|quiero saber|necesito saber|sabes|cuentame|me dices|informame|vendido|vendimos|ventas|facturado|cobrado)\b/.test(n);
     return !pregunta && M.leerFecha(t).iso ? 'recordatorio' : 'nose';
   };
   // Lo que queda de la frase para usar como titulo: sin la orden ni la fecha.

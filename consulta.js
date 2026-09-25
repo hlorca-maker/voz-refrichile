@@ -177,16 +177,24 @@
       pintar(card('¿Cuál cliente?', '<div class="vc-acc">' + clis.map(function (c) { return '<button type="button" class="vc-btn s" data-acc="ficha" data-rut="' + esc(c.r) + '" data-para="' + para + '">' + esc(c.n) + '</button>'; }).join('') + '</div>'));
       decir('¿Cuál de estos? ' + clis.slice(0, 3).map(function (c) { return c.n; }).join(', '));
     }
-    function cardBorrador() {
-      var b = BORR, opts = '<option value="">— Sin cliente —</option>' + b.clis.concat(b.cli && !b.clis.some(function (c) { return c.r === b.cli; }) ? [cartera.porRut[b.cli]] : []).filter(Boolean)
-        .map(function (c) { return '<option value="' + esc(c.r) + '"' + (c.r === b.cli ? ' selected' : '') + '>' + esc(c.n) + '</option>'; }).join('');
+    /* Confirmar es una linea, como Siri: que, cuando, con quien, y "Si / No / Cambiar". El
+       formulario completo solo si se toca "Cambiar" (Humberto, 25-09-2026: "por que aparece un
+       formulario?"). */
+    function cardBorrador(editar) {
+      var b = BORR, c = cartera.porRut[b.cli], nomTipo = { recordatorio: 'Recordatorio', tarea: 'Tarea', visita: 'Visita', prosp: 'Prospección', nota: 'Nota' }[b.tipo];
+      if (!editar) {
+        pintar(card('¿Lo guardo?', '<div class="vc-nom">' + esc(b.titulo) + '</div><div class="vc-nota">' + nomTipo + ' · ' + esc(M.capital(M.fechaTxt(b.fecha))) + (b.hora && b.tipo === 'recordatorio' ? ' a las ' + esc(b.hora) : '') + (c ? ' · ' + esc(c.n) : '') + '</div>'
+          + '<div class="vc-acc"><button type="button" class="vc-btn s" data-acc="cancelar">No</button><button type="button" class="vc-btn s" data-acc="editar">Cambiar</button><button type="button" class="vc-btn p" data-acc="guardar">Sí, guardar</button></div>', b.cot ? 'Cot. ' + b.cot : ''));
+        decir(M.fraseBorrador(b, cartera)); return;
+      }
+      var opts = '<option value="">— Sin cliente —</option>' + b.clis.concat(b.cli && !b.clis.some(function (x) { return x.r === b.cli; }) ? [c] : []).filter(Boolean)
+        .map(function (x) { return '<option value="' + esc(x.r) + '"' + (x.r === b.cli ? ' selected' : '') + '>' + esc(x.n) + '</option>'; }).join('');
       pintar(card('Guardar en el CRM', '<div class="vc-tipos">' + TIPOS.map(function (t) { return '<button type="button" data-acc="tipo" data-t="' + t[0] + '" class="' + (t[0] === b.tipo ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div>'
         + '<div class="vc-campo"><label>Qué</label><input name="titulo" value="' + esc(b.titulo) + '"></div>'
         + '<div class="vc-campo"><label>Cliente</label><select name="cli">' + opts + '</select></div>'
         + '<div class="vc-dos"><div class="vc-campo"><label>Fecha</label><input name="fecha" type="date" value="' + esc(b.fecha) + '"></div><div class="vc-campo"><label>Hora' + (b.tipo === 'recordatorio' ? ' del aviso' : '') + '</label><input name="hora" type="time" value="' + esc(b.hora) + '"></div></div>'
         + '<div class="vc-campo"><label>Detalle</label><textarea name="detalle">' + esc(b.detalle) + '</textarea></div>'
         + '<div class="vc-acc"><button type="button" class="vc-btn s" data-acc="cancelar">Cancelar</button><button type="button" class="vc-btn p" data-acc="guardar">Guardar</button></div>', b.cot ? 'Cot. ' + b.cot : ''));
-      decir(M.fraseBorrador(b, cartera));
     }
     function leerBorrador() {
       var f = res.querySelector('.vc-card'); if (!BORR || !f || !f.querySelector('[name=titulo]')) return;
@@ -272,6 +280,8 @@
       if (r.tipo === 'pend') return cardPend(true);
       if (r.tipo === 'precio' || r.tipo === 'stock') {
         if (r.resultado) return cardProductos(r.tipo, r.resultado);
+        // No esta en la copia: si hay IA, que lo intente ella (quizas no era un producto); si no, se dice.
+        if (datos.t && IA && navigator.onLine !== false && clave()) return preguntarIA(texto);
         if (datos.t || navigator.onLine === false) return cardNoProd(r.q);
         pintar(card(r.tipo === 'precio' ? 'Precio' : 'Stock', '<div class="vc-nota">Buscando en el CRM…</div>'));
         return api.llamar(r.consulta.accion, r.consulta).then(function (o) { if (!o.ok) return aviso(o.error || 'No se pudo.', true); if (!(o.items || []).length) return cardNoProd(r.q); cardProductos(r.tipo, o); }).catch(function (e) { aviso(M.errTxt(e), true); });
@@ -377,7 +387,8 @@
       else if (acc === 'recordar') { var c = cartera.porRut[b.dataset.rut]; BORR = M.borrador('recordatorio', 'Llamar a ' + (c ? c.n : '') + ' mañana', c ? [c] : []); cardBorrador(); }
       else if (acc === 'abrirCliente') { if (opc.alAbrirCliente) opc.alAbrirCliente(b.dataset.rut, datos.cliMap[b.dataset.rut]); }
       else if (acc === 'producto') { if (opc.alAbrirProducto) opc.alAbrirProducto(b.dataset.cod); }
-      else if (acc === 'tipo') { leerBorrador(); BORR.tipo = b.dataset.t; if (BORR.tipo === 'recordatorio' && !BORR.hora) BORR.hora = '09:00'; cardBorrador(); }
+      else if (acc === 'editar') { if (BORR) cardBorrador(true); }
+      else if (acc === 'tipo') { leerBorrador(); BORR.tipo = b.dataset.t; if (BORR.tipo === 'recordatorio' && !BORR.hora) BORR.hora = '09:00'; cardBorrador(true); }
       else if (acc === 'cancelar') { BORR = null; pintar(''); }
       else if (acc === 'guardar') guardarBorrador();
     });
