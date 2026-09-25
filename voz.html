@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voz Refrichile</title>
+<meta name="description" content="Asistente de voz del equipo comercial de Refrichile: habla y listo.">
+<meta name="theme-color" content="#050B18">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+/* Solo una imagen en pantalla (Humberto, 25-09-2026): la esfera respira, escucha, piensa y habla. */
+:root{--a:#3B9BFF;--b:#0A6FE8;--c:#7FD3FF;--rojo:#FF5A4E;--txt:#EAF1FF;--mut:#8FA1C2}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:radial-gradient(120% 90% at 50% 110%,#0E2A5C 0%,#071530 45%,#050B18 100%);color:var(--txt);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent;overflow:hidden;user-select:none}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
+.arriba{position:fixed;top:calc(10px + env(safe-area-inset-top));left:12px;right:12px;display:flex;justify-content:space-between;align-items:center}
+.arriba a,.arriba button{color:var(--mut);text-decoration:none;font-size:13px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:7px 12px;cursor:pointer}
+.arriba .who{font-size:12px;color:var(--mut)}
+#orb{position:relative;width:min(62vw,250px);aspect-ratio:1;border-radius:50%;border:0;cursor:pointer;padding:0;
+  background:radial-gradient(circle at 35% 30%,#BFE3FF 0%,var(--c) 18%,var(--a) 45%,var(--b) 70%,#08306E 100%);
+  box-shadow:0 0 70px rgba(59,155,255,.45),0 30px 80px -30px rgba(59,155,255,.9),inset 0 -20px 40px rgba(0,0,0,.25);
+  animation:respira 4.5s ease-in-out infinite;transition:box-shadow .4s}
+#orb:focus-visible{outline:3px solid var(--c);outline-offset:10px}
+#orb::before,#orb::after{content:"";position:absolute;inset:-14px;border-radius:50%;border:2px solid rgba(127,211,255,.35);opacity:0}
+@keyframes respira{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+@keyframes onda{0%{transform:scale(.9);opacity:.9}100%{transform:scale(1.35);opacity:0}}
+@keyframes gira{to{filter:hue-rotate(360deg)}}
+@keyframes habla{0%,100%{transform:scale(1)}30%{transform:scale(1.07)}60%{transform:scale(.98)}}
+body.escuchando #orb{animation:respira 1.6s ease-in-out infinite;box-shadow:0 0 110px rgba(127,211,255,.85),0 30px 80px -30px rgba(59,155,255,1)}
+body.escuchando #orb::before{animation:onda 1.4s ease-out infinite}
+body.escuchando #orb::after{animation:onda 1.4s ease-out .5s infinite}
+body.pensando #orb{animation:gira 2.2s linear infinite,respira 2s ease-in-out infinite}
+body.hablando #orb{animation:habla .9s ease-in-out infinite;box-shadow:0 0 90px rgba(59,155,255,.7)}
+body.error #orb{background:radial-gradient(circle at 35% 30%,#FFD3CF 0%,#FF8A80 20%,var(--rojo) 50%,#8A1B14 100%);box-shadow:0 0 70px rgba(255,90,78,.5)}
+@media (prefers-reduced-motion:reduce){#orb,#orb::before,#orb::after{animation:none!important}}
+#est{margin-top:34px;font-size:15px;color:var(--mut);min-height:22px;text-align:center}
+#cap{margin-top:8px;max-width:520px;text-align:center;font-size:18px;line-height:1.35;min-height:50px;padding:0 6px;transition:opacity .4s;overflow-wrap:anywhere}
+#cap.tenue{opacity:.55;font-size:15px}
+.chips{display:flex;gap:10px;margin-top:18px;min-height:46px}
+.chip{display:none;align-items:center;gap:8px;min-height:46px;padding:0 18px;border-radius:999px;border:0;background:#22C55E;color:#fff;font-weight:700;text-decoration:none;font-size:15px}
+.chip.s{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);color:var(--txt);font-weight:600}
+.chip.ver{display:inline-flex}
+.pie{position:fixed;bottom:calc(14px + env(safe-area-inset-bottom));left:0;right:0;text-align:center;font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="arriba"><a href="./" id="pantalla">Pantalla</a><span class="who" id="who"></span><button type="button" id="nueva" title="Conversación nueva">Nueva</button></div>
+<button id="orb" type="button" aria-label="Hablar"></button>
+<div id="est" aria-live="polite">Toca la esfera y habla</div>
+<div id="cap" aria-live="polite"></div>
+<div class="chips"><a id="tel" class="chip" href="#">Llamar</a><button id="parar" class="chip s" type="button">Parar</button></div>
+<div class="pie" id="pie"></div>
+<script src="motor.js"></script>
+<script src="cerebro.js"></script>
+<script src="voz.js"></script>
+</body>
+</html>

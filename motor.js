@@ -137,10 +137,12 @@
 
   // ------------------------------------------------------------------ cartera de clientes
   var SUF = ' ltda limitada spa sa s.a eirl e.i.r.l sociedad soc cia y e hijos el la los las de del al en con por para un una ';
+  // Palabras de la orden que no son parte de un nombre de cliente ("tengo" casi calzaba con "Rengo").
+  var STOP_Q = ' tengo tienes tiene tenemos que cuando como donde quien cual hora dia llamar llamarlo llamarla llamarle llamo llame llama hablar visitar visite enviar mandar precio precios stock telefono fono correo direccion cotizacion cotizaciones recuerdame recordatorio tarea nota anota manana hoy pasado semana mes para por con del las los una uno dos tres cuatro cinco seis siete ocho nueve diez cliente empresa datos ficha contacto marca marcar hecha hecho lista mejor sobre ';
   function tokensCli(n) { return M.norm(n).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 2 && SUF.indexOf(' ' + w + ' ') < 0; }); }
   function parecido(a, b) {
     if (a === b) return true;
-    if (a.length < 5 || b.length < 5 || Math.abs(a.length - b.length) > 1) return false;
+    if (a.length < 6 || b.length < 6 || Math.abs(a.length - b.length) > 1) return false;
     var i = 0, j = 0, dif = 0;
     while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++dif > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } }
     return dif + (a.length - i) + (b.length - j) <= 1;
@@ -158,7 +160,7 @@
   // Clientes que calzan con la frase, del mas probable al menos. laxo: cualquier calce sirve
   // (para "llama a Frio", donde la frase es casi solo el nombre y se elige tocando).
   M.Cartera.prototype.buscar = function (frase, laxo) {
-    var idf = this.idf, ws = M.norm(frase).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 1 && SUF.indexOf(' ' + w + ' ') < 0; }), out = [];
+    var idf = this.idf, ws = M.norm(frase).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 1 && SUF.indexOf(' ' + w + ' ') < 0 && STOP_Q.indexOf(' ' + w + ' ') < 0; }), out = [];
     var n0 = ws.length; for (var i = 0; i < n0 - 1; i++) { ws.push(ws[i] + ws[i + 1]); if (i < n0 - 2) ws.push(ws[i] + ws[i + 1] + ws[i + 2]); }
     this.lista.forEach(function (c) {
       if (!c._t || !c._t.length) return;
@@ -311,10 +313,10 @@
   };
   // Que pendiente se quiso cerrar ("ya llame a Clima Norte"): el que mas palabras comparte.
   M.buscarPendiente = function (texto, cli, pend) {
-    var ws = M.norm(texto).split(' ');
+    var ws = M.norm(texto).split(' '), raices = ws.filter(function (w) { return w.length >= 5; }).map(function (w) { return w.slice(0, 4); });
     return (pend || []).map(function (t) {
       var tt = M.norm(t.titulo + ' ' + t.cliente).split(' '), sc = 0;
-      tt.forEach(function (w) { if (w.length > 3 && ws.indexOf(w) >= 0) sc++; });
+      tt.forEach(function (w) { if (w.length > 3 && ws.indexOf(w) >= 0) sc++; else if (w.length >= 5 && raices.indexOf(w.slice(0, 4)) >= 0) sc += .5; });   // "llame" ~ "llamar"
       if (cli && t.cliente && M.norm(t.cliente) === M.norm(cli.n)) sc += 3;
       return { t: t, sc: sc };
     }).filter(function (x) { return x.sc > 0; }).sort(function (a, b) { return b.sc - a.sc; }).map(function (x) { return x.t; });

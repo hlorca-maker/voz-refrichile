@@ -3,7 +3,7 @@
   "short_name": "Voz",
   "description": "Recordatorios, tareas, precios y stock por voz",
   "lang": "es-CL",
-  "start_url": "./?mic=1",
+  "start_url": "./voz.html?mic=1",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
@@ -15,7 +15,8 @@
     { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Hablar", "short_name": "Hablar", "url": "./?mic=1", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Mis pendientes de hoy", "short_name": "Pendientes", "url": "./?modo=pendientes", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Hablar", "short_name": "Hablar", "url": "./voz.html?mic=1", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Mis pendientes de hoy", "short_name": "Pendientes", "url": "./?modo=pendientes", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Pantalla (escribir)", "short_name": "Pantalla", "url": "./", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }
