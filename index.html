@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voz Refrichile</title>
+<meta name="description" content="Recordatorios, tareas, precios y stock por voz para el equipo comercial de Refrichile.">
+<meta name="theme-color" content="#0A6FE8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --bg:#F3F5F9;--surf:#FFFFFF;--surf2:#EEF2F8;--bord:#DCE3EE;--txt:#131A26;--mut:#5B6576;--hint:#8B94A3;
+  --acc:#0A6FE8;--acc2:#3B9BFF;--accbg:#E3EEFF;--ok:#1F8A48;--okbg:#DDF5E6;--warn:#A85D00;--warnbg:#FFF0DB;--crit:#C62828;--critbg:#FDE3E3;
+  --shadow:0 18px 40px -22px rgba(19,26,38,.45);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0B111C;--surf:#141C2A;--surf2:#1B2536;--bord:#263349;--txt:#EEF2F8;--mut:#A3AEC0;--hint:#7C879A;
+    --acc:#3B9BFF;--acc2:#64B0FF;--accbg:#13294A;--ok:#5CD97A;--okbg:#153524;--warn:#FFC266;--warnbg:#3A2A10;--crit:#FF7A70;--critbg:#3D1715;
+    --shadow:0 18px 40px -22px rgba(0,0,0,.8);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+body{min-height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button,input,select,textarea{font:inherit;color:inherit}
+header{display:flex;align-items:center;gap:10px;padding:14px 16px 6px}
+header .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#0A6FE8,#3B9BFF);display:grid;place-items:center;flex:none}
+header .logo svg{width:17px;height:17px;fill:#fff}
+header .t{font-weight:700;font-size:16px;letter-spacing:-.01em}
+header .who{font-size:12.5px;color:var(--mut)}
+header .sp{flex:1}
+.badge{display:none;align-items:center;gap:5px;border:1px solid var(--bord);background:var(--surf);border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer}
+.badge b{color:var(--crit)}
+main{flex:1;display:flex;flex-direction:column;gap:14px;padding:6px 16px 22px;max-width:620px;width:100%;margin:0 auto}
+.mic-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;padding:18px 0 4px}
+#mic{position:relative;width:148px;height:148px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(145deg,#0A6FE8,#3B9BFF);
+  box-shadow:0 20px 44px -16px rgba(10,111,232,.75);display:grid;place-items:center;transition:transform .15s}
+#mic:active{transform:scale(.97)}
+#mic svg{width:58px;height:58px;fill:#fff}
+#mic.on{background:linear-gradient(145deg,#D93025,#FF5A4E);box-shadow:0 20px 44px -16px rgba(217,48,37,.75)}
+#mic.on::after{content:"";position:absolute;inset:-10px;border-radius:50%;border:3px solid rgba(217,48,37,.45);animation:pulso 1.3s ease-out infinite}
+#mic:focus-visible{outline:3px solid var(--acc2);outline-offset:6px}
+@keyframes pulso{from{transform:scale(.92);opacity:1}to{transform:scale(1.18);opacity:0}}
+@media (prefers-reduced-motion: reduce){#mic.on::after{animation:none}}
+#estado{font-size:14px;color:var(--mut);min-height:21px;text-align:center}
+#vivo{min-height:26px;text-align:center;font-size:18px;font-weight:600;padding:0 8px;overflow-wrap:anywhere}
+.escribir{display:flex;gap:8px}
+.escribir input{flex:1;min-width:0;min-height:46px;border:1px solid var(--bord);border-radius:12px;background:var(--surf);padding:0 14px}
+.escribir button{min-width:46px;min-height:46px;border:0;border-radius:12px;background:var(--surf2);cursor:pointer;display:grid;place-items:center}
+.escribir button svg{width:20px;height:20px;fill:var(--acc)}
+.card{background:var(--surf);border:1px solid var(--bord);border-radius:16px;padding:14px 15px;box-shadow:var(--shadow)}
+.card h3{margin:0 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--hint);font-weight:700;display:flex;align-items:center;gap:7px}
+.card h3 .tag{letter-spacing:0;text-transform:none;font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--accbg);color:var(--acc)}
+.fila{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--bord)}
+.fila:first-of-type{border-top:0}
+.fila .n{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.fila .s{font-size:13px;color:var(--mut)}
+.fila .v{flex:none;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.fila .v small{display:block;font-weight:500;font-size:12px;color:var(--mut)}
+.campo{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+.campo label{font-size:12px;font-weight:600;color:var(--mut)}
+.campo input,.campo select,.campo textarea{min-height:44px;border:1px solid var(--bord);border-radius:11px;background:var(--surf2);padding:9px 12px;width:100%}
+.campo textarea{min-height:64px;resize:vertical}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tipos{display:flex;flex-wrap:wrap;gap:6px}
+.tipos button{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--bord);background:var(--surf2);cursor:pointer;font-size:13.5px}
+.tipos button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.acciones{display:flex;gap:9px;margin-top:14px}
+.btn{flex:1;min-height:48px;border:0;border-radius:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+.btn.p{background:var(--acc);color:#fff}
+.btn.s{background:var(--surf2);color:var(--txt);border:1px solid var(--bord)}
+.btn.ok{background:var(--ok);color:#fff}
+.btn:focus-visible,.tipos button:focus-visible,.escribir button:focus-visible{outline:3px solid var(--acc2);outline-offset:2px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--okbg);color:var(--ok)}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.crit{background:var(--critbg);color:var(--crit)}
+.nota{font-size:13px;color:var(--mut);margin-top:8px}
+.ej{display:flex;flex-wrap:wrap;gap:7px}
+.ej button{border:1px dashed var(--bord);background:transparent;border-radius:10px;padding:8px 11px;font-size:13px;color:var(--mut);cursor:pointer;text-align:left}
+.hist .fila .n{font-weight:500}
+.err{color:var(--crit)}
+#setup{display:none}
+.oculto{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg></div>
+  <div><div class="t">Voz Refrichile</div><div class="who" id="who">&nbsp;</div></div>
+  <div class="sp"></div>
+  <button class="badge" id="badge" type="button" aria-label="Ver mis pendientes de hoy"></button>
+</header>
+
+<main>
+  <section id="setup" class="card">
+    <h3>Acceso</h3>
+    <p style="margin:0">Esta app se abre con tu enlace personal. Pídeselo a Humberto y ábrelo una vez en este teléfono.</p>
+  </section>
+
+  <section id="app" class="oculto">
+    <div class="mic-wrap">
+      <button id="mic" type="button" aria-label="Hablar"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg></button>
+      <div id="estado" aria-live="polite">Toca y habla</div>
+      <div id="vivo" aria-live="polite"></div>
+    </div>
+    <form class="escribir" id="formTxt" autocomplete="off">
+      <input id="txt" type="text" enterkeyhint="send" placeholder="…o escríbelo aquí" aria-label="Escribir en vez de hablar">
+      <button type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24"><path d="M3 20.5 21 12 3 3.5 3 10l12 2-12 2z"/></svg></button>
+    </form>
+    <div id="res" style="display:flex;flex-direction:column;gap:12px;margin-top:14px"></div>
+    <section class="card" id="ayuda" style="margin-top:14px">
+      <h3>Puedes decir</h3>
+      <div class="ej" id="ejemplos"></div>
+    </section>
+    <section class="card hist oculto" id="hist" style="margin-top:14px">
+      <h3>Lo último</h3>
+      <div id="histList"></div>
+    </section>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

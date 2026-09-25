@@ -1,0 +1,21 @@
+{
+  "name": "Voz Refrichile",
+  "short_name": "Voz",
+  "description": "Recordatorios, tareas, precios y stock por voz",
+  "lang": "es-CL",
+  "start_url": "./?mic=1",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B111C",
+  "theme_color": "#0A6FE8",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Hablar", "short_name": "Hablar", "url": "./?mic=1", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Mis pendientes de hoy", "short_name": "Pendientes", "url": "./?modo=pendientes", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
