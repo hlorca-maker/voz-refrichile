@@ -71,13 +71,13 @@ function decir(texto, luego) {
 // ------------------------------------------------------------------ microfono
 var SR = window.SpeechRecognition || window.webkitSpeechRecognition, rec = null, escuchando = false, modoConfirmar = null;
 function estado(t, cls) { var e = $('estado'); e.textContent = t; e.className = cls || ''; }
-function escuchar(confirmacion) {
+function escuchar(confirmacion, esChat) {
   if (!SR) { estado('Este navegador no reconoce voz: escribe abajo.', 'err'); return; }
   if (escuchando) { try { rec.stop(); } catch (e) {} return; }
   modoConfirmar = confirmacion || null;
   rec = new SR(); rec.lang = 'es-CL'; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
   var final = '';
-  rec.onstart = function () { escuchando = true; $('mic').classList.add('on'); estado(modoConfirmar ? 'Te escucho: sí, no, o qué cambio' : 'Te escucho…'); $('vivo').textContent = ''; };
+  rec.onstart = function () { escuchando = true; $('mic').classList.add('on'); estado(modoConfirmar && !esChat ? 'Te escucho: sí, no, o qué cambio' : 'Te escucho…'); $('vivo').textContent = ''; };
   rec.onresult = function (ev) {
     var t = '';
     for (var i = ev.resultIndex; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) final += ev.results[i][0].transcript; }
@@ -217,6 +217,10 @@ function productoDe(t, cli) {
 
 // ------------------------------------------------------------------ procesar una frase
 function procesar(texto) {
+  if (IA && navigator.onLine) return chatear(texto);
+  return procesarLocal(texto);
+}
+function procesarLocal(texto) {
   $('vivo').textContent = texto;
   var tipo = intencion(texto), clis = buscarClientes(texto), cli = clis[0] || null;
   if (tipo === 'pend') return verPendientes(true);
@@ -461,6 +465,85 @@ function cerrarPorVoz(texto, cli) {
   });
 }
 
+
+// ------------------------------------------------------------------ CHAT con IA (25-09-2026)
+/* Humberto: "es muy tonto el sistema, la idea es que sea tipo chat bot". Con la IA
+   configurada, todo lo dicho va a la conversacion: el modelo consulta precios, stock,
+   clientes y pendientes, y guarda tareas preguntando antes. Si la IA no esta (sin clave,
+   sin cuota o sin senal), responde el motor por reglas de siempre. */
+var IA = false, ADMIN = false, CHAT = lsGet('voz_chat', { t: 0, m: [] });
+if (Date.now() - (CHAT.t || 0) > 30 * 60000) CHAT = { t: 0, m: [] };      // conversacion nueva tras 30 min
+function chatGuardar() { CHAT.t = Date.now(); CHAT.m = CHAT.m.slice(-24); lsSet('voz_chat', CHAT); }
+function burbuja(quien, html) {
+  var d = document.createElement('div'); d.className = 'burb ' + quien; d.innerHTML = html;
+  $('res').appendChild(d); $('ayuda').classList.add('oculto');
+  setTimeout(function () { d.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, 30);
+  return d;
+}
+function chatear(texto) {
+  $('vivo').textContent = '';
+  if (!$('res').querySelector('.burb')) $('res').innerHTML = '';
+  burbuja('u', esc(texto));
+  var pensando = burbuja('m pens', '<span></span><span></span><span></span>');
+  estado('Pensando…');
+  api('chat', { texto: texto, historial: CHAT.m }).then(function (o) {
+    pensando.remove();
+    if (!o.ok) {
+      if (o.sinIA || o.cuota) { IA = !o.sinIA && IA; burbuja('m', '<span class="nota">' + esc(o.error) + ' Uso el modo básico.</span>'); procesarLocal(texto); return; }
+      burbuja('m', '<span class="err">' + esc(o.error || 'No se pudo.') + '</span>'); estado('Toca y habla'); return;
+    }
+    CHAT.m.push({ r: 'u', t: texto }, { r: 'm', t: o.texto }); chatGuardar();
+    burbuja('m', esc(o.texto));
+    (o.tarjetas || []).forEach(function (t) { var h = tarjetaChat(t); if (h) burbuja('m tarj', h); });
+    if ((o.tarjetas || []).some(function (t) { return t.tipo === 'guardado' || t.tipo === 'hecha'; })) { histAgregar('✓ ' + o.texto.slice(0, 80)); cargarPendientes(); }
+    estado('Toca y habla');
+    // Si la IA pregunta algo, se escucha la respuesta sin tener que tocar nada.
+    decir(o.texto, function () { if (/\?\s*$/.test(o.texto) && lsGet(LS.conf, true)) setTimeout(function () { escuchar(function (r) { if (r) chatear(r); else estado('Toca y habla'); }, true); }, 150); });
+  }).catch(function () { pensando.remove(); burbuja('m', '<span class="nota">Sin conexión con la IA. Uso el modo básico.</span>'); procesarLocal(texto); });
+}
+function tarjetaChat(t) {
+  var d = t.datos || {};
+  if (t.tipo === 'precio' || t.tipo === 'stock') {
+    var its = d.items || []; if (!its.length) return '';
+    return '<div class="tt">' + (t.tipo === 'precio' ? 'Precio · ' + esc(d.listaNom || '') + (d.cliente ? ' · ' + esc(d.cliente) : '') : 'Stock') + '</div>' + its.map(function (x) {
+      return '<div class="fila"><div><div class="n">' + esc(x.desc) + '</div><div class="s">' + esc(x.cod) + (t.tipo === 'stock' && x.bod && x.bod.length ? ' · ' + x.bod.map(function (b) { return esc(b.b) + ' ' + b.s; }).join(' · ') : '') + '</div></div>'
+        + '<div class="v">' + (t.tipo === 'precio' ? pesos(x.precio) + '<small>+ IVA · stock ' + (x.stock || 0) + '</small>' : (x.stock || 0) + '<small>unidades</small>') + '</div></div>';
+    }).join('');
+  }
+  if (t.tipo === 'cliente') {
+    var c = d.cliente || {}, cs = d.cotizaciones || [], h = '<div class="tt">Cliente · ' + esc(c.lista || '') + (c.bloqueado ? ' · <span class="pill crit">Bloqueado</span>' : '') + '</div><div class="n" style="font-weight:700">' + esc(c.nombre) + '</div>';
+    if (c.fono) h += '<div class="fila"><div class="s">Teléfono</div><div class="v"><a href="tel:' + esc(c.fono.replace(/[^\d+]/g, '')) + '">' + esc(c.fono) + '</a></div></div>';
+    if (c.mail) h += '<div class="fila"><div class="s">Correo</div><div class="v" style="font-weight:500"><a href="mailto:' + esc(c.mail) + '">' + esc(c.mail) + '</a></div></div>';
+    if (c.dir || c.comuna) h += '<div class="fila"><div class="s">Dirección</div><div class="v" style="font-weight:500"><a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(((c.dir || '') + ' ' + (c.comuna || '')).trim()) + '">' + esc(((c.dir || '') + ', ' + (c.comuna || '')).replace(/^, |, $/g, '')) + '</a></div></div>';
+    if (cs.length) h += cs.map(function (q) {
+      var R = d.reglas || { vig: 5, cal: 14 }, vig = q.dias <= R.vig, cal = q.dias < R.cal;
+      return '<div class="fila"><div><div class="n">Cot. ' + esc(q.folio) + '</div><div class="s">' + esc(q.fecha) + ' · ' + q.dias + ' d</div></div><div class="v">' + pesos(q.monto) + '<small>' + (cal ? (vig ? '<span class="pill ok">precio vigente</span>' : '<span class="pill warn">actualizar precio</span>') : 'antigua') + '</small></div></div>';
+    }).join('');
+    return h;
+  }
+  if (t.tipo === 'pendientes') {
+    var ps = d || []; if (!ps.length) return '<div class="tt">Pendientes</div><div class="nota">Nada pendiente.</div>';
+    return '<div class="tt">Pendientes</div>' + ps.slice(0, 8).map(function (x) {
+      var cuando = x.dias == null ? 'sin fecha' : (x.dias < 0 ? '<span class="pill crit">vencida ' + (-x.dias) + ' d</span>' : (x.dias === 0 ? '<span class="pill warn">hoy</span>' : (x.dias === 1 ? 'mañana' : 'en ' + x.dias + ' d')));
+      return '<div class="fila"><div><div class="n">' + esc(x.titulo) + '</div><div class="s">' + (x.cliente ? esc(x.cliente) + ' · ' : '') + cuando + '</div></div></div>';
+    }).join('');
+  }
+  if (t.tipo === 'guardado') return '<div class="tt">Guardado en el CRM</div><div class="n" style="font-weight:600">' + esc(d.titulo) + '</div><div class="nota">' + esc(capital(fechaTxt(d.fecha))) + (d.hora ? ' a las ' + esc(d.hora) : '') + (d.cliente ? ' · ' + esc(d.cliente) : '') + (d.aviso === 'ok' ? ' · con aviso en tu teléfono' : '') + '</div>';
+  if (t.tipo === 'hecha') return '<div class="tt">Marcada como hecha</div>';
+  return '';
+}
+function nuevaConversacion() { CHAT = { t: 0, m: [] }; lsSet('voz_chat', CHAT); pintar(''); estado('Toca y habla'); }
+// Configuracion de la IA: solo cuentas admin. La clave la pega la persona y va directo a la API.
+function abrirConfig() {
+  pintar('<div class="card"><h3>Inteligencia artificial</h3><div class="nota" id="cfgEst">Consultando…</div>'
+    + '<div class="campo"><label for="cfgKey">Clave de Gemini (Google AI Studio)</label><input id="cfgKey" type="password" autocomplete="off" placeholder="Pega aquí la clave"></div>'
+    + '<div class="acciones"><button class="btn s" type="button" id="cfgQuitar">Quitar clave</button><button class="btn p" type="button" id="cfgGuardar">Guardar y probar</button></div></div>');
+  function mostrar(o) { $('cfgEst').textContent = o.ok ? ((o.configurada ? 'Configurada' + (o.modelo ? ' (' + o.modelo + ')' : '') : 'Sin clave: se usa el modo básico.') + (o.prueba ? ' · Prueba: ' + o.prueba : '')) : (o.error || 'No se pudo.'); IA = !!(o.ok && o.configurada); }
+  api('configIA', {}).then(mostrar);
+  $('cfgGuardar').onclick = function () { var k = $('cfgKey').value.trim(); if (!k) return; $('cfgEst').textContent = 'Guardando y probando…'; api('configIA', { clave: k, probar: true }).then(function (o) { $('cfgKey').value = ''; mostrar(o); }); };
+  $('cfgQuitar').onclick = function () { api('configIA', { clave: '' }).then(mostrar); };
+}
+
 // ------------------------------------------------------------------ pantalla
 function pintar(h) { $('res').innerHTML = h; if (h) $('ayuda').classList.add('oculto'); else $('ayuda').classList.remove('oculto'); }
 function histAgregar(t) { var h = lsGet(LS.hist, []); h.unshift({ t: t, f: Date.now() }); lsSet(LS.hist, h.slice(0, 8)); pintarHist(); }
@@ -482,14 +565,19 @@ function iniciar() {
   $('app').classList.remove('oculto');
   $('ejemplos').innerHTML = EJEMPLOS.map(function (e) { return '<button type="button">' + esc(e) + '</button>'; }).join('');
   $('ejemplos').onclick = function (ev) { var b = ev.target.closest('button'); if (b) { $('txt').value = b.textContent; $('txt').focus(); } };
-  $('mic').onclick = function () { if (window.speechSynthesis) speechSynthesis.cancel(); escuchar(hayPregunta() ? respuestaVoz : null); };
-  $('badge').onclick = function () { verPendientes(false); };
-  $('formTxt').onsubmit = function (ev) { ev.preventDefault(); var t = $('txt').value.trim(); if (t) { $('txt').value = ''; $('txt').blur(); if (!responder(t)) procesar(t); } };
+  $('mic').onclick = function () { if (window.speechSynthesis) speechSynthesis.cancel(); escuchar(!IA && hayPregunta() ? respuestaVoz : null); };
+  $('badge').onclick = function () { if (IA) chatear('¿Qué tengo pendiente?'); else verPendientes(false); };
+  $('cfg').onclick = abrirConfig;
+  $('nueva').onclick = nuevaConversacion;
+  $('formTxt').onsubmit = function (ev) { ev.preventDefault(); var t = $('txt').value.trim(); if (t) { $('txt').value = ''; $('txt').blur(); if (IA || !responder(t)) procesar(t); } };
   pintarHist();
   prepararClientes(); CLI.lista.forEach(function (c) { CLI_POR_RUT[c.r] = c; });
   api('inicio', {}).then(function (o) {
     if (!o.ok) return;
     $('who').textContent = o.nombre;
+    IA = !!o.ia; ADMIN = !!o.admin;
+    $('cfg').style.display = ADMIN ? 'inline-flex' : 'none';
+    $('nueva').style.display = IA ? 'inline-flex' : 'none';
     CLI = { lista: o.clientes || [], t: Date.now() }; lsSet(LS.cli, CLI); prepararClientes();
     CLI_POR_RUT = {}; CLI.lista.forEach(function (c) { CLI_POR_RUT[c.r] = c; });
     var b = $('badge'); b.style.display = o.pend ? 'inline-flex' : 'none'; b.innerHTML = '<b>' + o.pend + '</b> para hoy';
