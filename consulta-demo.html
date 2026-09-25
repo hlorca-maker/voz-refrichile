@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Consulta rápida · CRM móvil (demo)</title>
+<meta name="description" content="Demostración del componente de consulta rápida de Voz Refrichile incorporado en una pantalla tipo CRM móvil.">
+<meta name="theme-color" content="#1e40af">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+/* Paleta del CRM Refrichile (Index.html): el componente la toma sola. */
+:root{--primary:#1e40af;--primary-dark:#1e3a8a;--primary-light:#dbeafe;--bg:#f5f7fa;--surface:#ffffff;--border:#e5e7eb;--text:#111827;--text-muted:#6b7280;--text-soft:#9ca3af;
+  --success:#16a34a;--success-bg:#dcfce7;--warning:#f59e0b;--warning-bg:#fef3c7;--danger:#dc2626;--danger-bg:#fee2e2}
+@media (prefers-color-scheme:dark){:root{--primary:#60a5fa;--primary-light:#1e3a8a;--bg:#0f172a;--surface:#1e293b;--border:#334155;--text:#f1f5f9;--text-muted:#94a3b8;--text-soft:#64748b;--success:#4ade80;--success-bg:#14532d;--warning:#fbbf24;--warning-bg:#78350f;--danger:#f87171;--danger-bg:#7f1d1d}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.top{position:sticky;top:0;z-index:5;background:var(--primary);color:#fff;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;display:flex;align-items:center;gap:10px}
+.top .logo{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.18);display:grid;place-items:center;font-weight:800}
+.top .t{font-weight:700}.top .s{font-size:12px;opacity:.85}.top .sp{flex:1}.top .av{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.25);display:grid;place-items:center;font-size:12px;font-weight:700}
+main{max-width:640px;margin:0 auto;padding:14px 16px 90px}
+h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);margin:22px 0 8px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}.kpi b{display:block;font-size:20px}.kpi span{font-size:12px;color:var(--text-muted)}
+.lista{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.lista div{padding:11px 14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px}.lista div:first-child{border-top:0}.lista small{color:var(--text-muted)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);display:flex;padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+nav.tabs a{flex:1;text-align:center;font-size:11px;color:var(--text-muted);text-decoration:none;padding:4px 0}nav.tabs a.on{color:var(--primary);font-weight:700}
+.como{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:13.5px}
+.como pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border-radius:8px;padding:10px;font-size:12px;line-height:1.45;margin:8px 0 0}
+.como ul{padding-left:18px;margin:8px 0 0}
+.demo-nota{font-size:12px;color:var(--text-muted);margin:6px 0 0}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">R</div>
+  <div><div class="t">CRM Refrichile</div><div class="s">Mi espacio · demo del componente</div></div>
+  <div class="sp"></div>
+  <div class="av">HL</div>
+</header>
+<main>
+  <div id="consulta"></div>
+  <div class="demo-nota">Así queda la consulta rápida dentro del CRM móvil: se escribe (o se dicta) y responde al instante, sin abrir otra pantalla.</div>
+
+  <h2>Hoy</h2>
+  <div class="kpis"><div class="kpi"><b>3</b><span>visitas</span></div><div class="kpi"><b>$2,4M</b><span>cotizado</span></div><div class="kpi"><b>5</b><span>pendientes</span></div></div>
+
+  <h2>Cómo se incorpora al CRM</h2>
+  <div class="como">
+    Dos archivos y una línea. En la página del CRM (HtmlService):
+<pre>&lt;div id="consulta"&gt;&lt;/div&gt;
+&lt;script src="https://hlorca-maker.github.io/voz-refrichile/motor.js"&gt;&lt;/script&gt;
+&lt;script src="https://hlorca-maker.github.io/voz-refrichile/consulta.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  VozConsulta.montar(document.getElementById('consulta'), {
+    api: 'https://script.google.com/macros/s/…/exec',   // la API de voz
+    clave: '&lt;?= claveVoz ?&gt;',                          // clave personal de quien está conectado
+    alAbrirCliente: function (rut) { abrirFichaCrm(rut); } // opcional
+  });
+&lt;/script&gt;</pre>
+    <ul>
+      <li>Responde desde los datos guardados en el teléfono (productos, precios, stock, cartera, cotizaciones, pendientes): en milisegundos y también sin señal.</li>
+      <li>Lo que se guarda (recordatorios, tareas, "hecha") se envía por detrás con reintentos seguros; el CRM lo ve en Tareas pendientes.</li>
+      <li>Toma los colores del CRM (<code>--primary</code>, <code>--surface</code>, …) y se adapta a claro/oscuro.</li>
+      <li>Micrófono: donde el navegador lo permita, dicta ahí mismo; dentro del marco de Apps Script (bloqueado) el botón abre la app de voz.</li>
+      <li>Lo que la copia local no resuelve va a la IA de la API (si está configurada).</li>
+    </ul>
+  </div>
+</main>
+<nav class="tabs"><a class="on" href="#">Inicio</a><a href="#">Clientes</a><a href="#">Tareas</a><a href="#">Cotizaciones</a><a href="#">Más</a></nav>
+<script src="motor.js"></script>
+<script src="consulta.js"></script>
+<script>
+  // La clave viene en el enlace personal (#t=...) o ya esta guardada por la app de voz (mismo origen).
+  var m = location.hash.match(/[#&]t=([A-Za-z0-9_\-]{20,})/);
+  if (m) { try { localStorage.setItem('voz_t', JSON.stringify(m[1])); } catch (e) {} history.replaceState(null, '', location.pathname + location.search); }
+  VozConsulta.montar(document.getElementById('consulta'), {
+    api: 'https://script.google.com/macros/s/AKfycbw4Ax55jS8OKCvICEFsbYSiOWvlbgcuboILiwc4VYq92y_IcrgbMBnAK1LEUKvaVa_Omg/exec',
+    alAbrirCliente: function (rut, c) { alert('Aquí el CRM abriría la ficha de ' + (c ? c.n : rut)); }
+  });
+</script>
+</body>
+</html>
