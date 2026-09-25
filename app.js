@@ -40,14 +40,17 @@ function numero(w) { return /^\d+$/.test(w) ? +w : (NUM[w] || null); }
    tope, para que una que se cuelgue no trabe su fila.
    Cuando falla, el error dice que paso: e.red = no salio (sin senal); e.tope = no volvio a
    tiempo; e.perdida = volvio 404 o ilegible (se perdio la respuesta, aunque la llamada SI se
-   ejecuto). Por eso solo las lecturas se reintentan, una vez: repetir un chat, una tarea o una
-   "hecha" puede dejarla dos veces. */
-var API_COLA = [], API_VUELO = { u: 0, f: 0 }, API_TOPE = 35000;
-var API_RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1 };
+   ejecuto). Las lecturas se reintentan una vez si se perdio la respuesta. El chat, las tareas
+   y las "hecha" se reintentan (perdida o tope) con el MISMO rid mientras quede plazo: la API
+   reconoce el rid y devuelve lo que ya hizo, sin guardarlo dos veces ni volver a preguntarle a
+   la IA. */
+var API_COLA = [], API_VUELO = { u: 0, f: 0 }, API_TOPE = 35000, API_PLAZO = 75000;
+var API_RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1 }, API_RID = { chat: 1, tarea: 1, hecha: 1 };
 function api(accion, datos, opc) {
-  opc = opc || {};
+  opc = opc || {}; datos = Object.assign({}, datos || {});
+  if (API_RID[accion] && !datos.rid) datos.rid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   return new Promise(function (ok, mal) {
-    API_COLA.push({ accion: accion, datos: datos || {}, ms: opc.ms || API_TOPE, fila: opc.fondo ? 'f' : 'u', ok: ok, mal: mal });
+    API_COLA.push({ accion: accion, datos: datos, ms: opc.ms || API_TOPE, fila: opc.fondo ? 'f' : 'u', plazo: opc.plazo, alReintentar: opc.alReintentar, ok: ok, mal: mal });
     apiSiguiente();
   });
 }
@@ -61,8 +64,18 @@ function apiLanzar(x) {
   // configIA con clave la guarda y la prueba: eso no se repite.
   var releer = API_RELEER[x.accion] && !(x.accion === 'configIA' && 'clave' in x.datos);
   function fin() { API_VUELO[x.fila]--; apiSiguiente(); }
-  Promise.resolve().then(function () { return apiUna(x.accion, x.datos, x.ms); })   // ni un error inesperado traba la fila
-    .catch(function (e) { if (releer && e.perdida) return apiUna(x.accion, x.datos, x.ms); throw e; })
+  // Con rid se insiste mientras quede plazo (medido: Google llego a perder 5 respuestas seguidas);
+  // cada intento extra solo recoge lo ya hecho. Las lecturas, una vez.
+  var t0 = Date.now(), plazo = x.plazo || API_PLAZO, extra = 0;
+  function intento() { return apiUna(x.accion, x.datos, Math.min(x.ms, plazo - (Date.now() - t0))); }
+  function otra(e) {
+    var queda = plazo - (Date.now() - t0);
+    if (!(releer && e.perdida && !extra) && !(x.datos.rid && (e.perdida || e.tope) && queda > 5000)) throw e;
+    extra++; if (x.alReintentar) x.alReintentar(e);
+    return new Promise(function (r) { setTimeout(r, 800); }).then(intento).catch(otra);
+  }
+  Promise.resolve().then(intento)   // ni un error inesperado traba la fila
+    .catch(otra)
     .then(function (o) { fin(); x.ok(o); }, function (e) { fin(); x.mal(e); });
 }
 function apiUna(accion, datos, ms) {
@@ -243,7 +256,11 @@ function intencion(t) {
   if (/(tengo que|hay que|debo|volver a|no olvidar)/.test(n)) return 'tarea';
   var orden = ['contacto', 'cotiz', 'stock', 'precio', 'visita', 'prosp', 'tarea'];
   for (var i = 0; i < orden.length; i++) if (R[orden[i]].test(n)) return orden[i];
-  return leerFecha(t).iso ? 'recordatorio' : 'nota';
+  // Humberto (25-09-2026): "siempre cree que estoy creando una nota". Una nota solo si se pide;
+  // una fecha sola es recordatorio solo si no es una pregunta; lo demas no se adivina.
+  if (/ (anota\w*|apunta\w*|nota|registra que|deja (una )?nota) /.test(n)) return 'nota';
+  var pregunta = /\?/.test(t) || /^ (que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|cuando|dame|dime|busca\w*|muestrame) /.test(n);
+  return !pregunta && leerFecha(t).iso ? 'recordatorio' : 'nose';
 }
 function capital(s) { s = String(s || '').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 // Lo que queda de la frase para usar como titulo: sin la orden ni la fecha.
@@ -276,6 +293,7 @@ function procesar(texto) {
 function procesarLocal(texto) {
   $('vivo').textContent = texto;
   var tipo = intencion(texto), clis = buscarClientes(texto), cli = clis[0] || null;
+  if (tipo === 'nose') { var m = 'No te entendí. Puedo buscar precios, stock, datos de un cliente o tus pendientes, y guardar un recordatorio o una tarea.'; estado(m); decir(m); return; }
   if (tipo === 'pend') return verPendientes(true);
   if (tipo === 'hecha') return cerrarPorVoz(texto, cli);
   if (tipo === 'precio' || tipo === 'stock') {
@@ -531,7 +549,10 @@ function cerrarPorVoz(texto, cli) {
    configurada, todo lo dicho va a la conversacion: el modelo consulta precios, stock,
    clientes y pendientes, y guarda tareas preguntando antes. Si la IA no esta (sin clave,
    sin cuota o sin senal), responde el motor por reglas de siempre. */
-var IA = false, ADMIN = false, CHAT = lsGet('voz_chat', { t: 0, m: [] });
+/* IA se recuerda de la ultima vez (voz_ia): si Google demora o pierde la respuesta de "inicio",
+   la app igual conversa con la IA en vez de caer al motor por reglas (25-09-2026). */
+var IA = lsGet('voz_ia', true), ADMIN = false, CHAT = lsGet('voz_chat', { t: 0, m: [] });
+function fijarIA(v) { IA = !!v; lsSet('voz_ia', IA); if ($('nueva')) $('nueva').style.display = IA ? 'inline-flex' : 'none'; }
 if (Date.now() - (CHAT.t || 0) > 30 * 60000) CHAT = { t: 0, m: [] };      // conversacion nueva tras 30 min
 function chatGuardar() { CHAT.t = Date.now(); CHAT.m = CHAT.m.slice(-24); lsSet('voz_chat', CHAT); }
 function burbuja(quien, html) {
@@ -546,10 +567,10 @@ function chatear(texto) {
   burbuja('u', esc(texto));
   var pensando = burbuja('m pens', '<span></span><span></span><span></span>');
   estado('Pensando…');
-  api('chat', { texto: texto, historial: CHAT.m }, { ms: 28000 }).then(function (o) {
+  api('chat', { texto: texto, historial: CHAT.m }, { ms: 30000, alReintentar: function () { estado('Google está lento: sigo esperando la respuesta…'); } }).then(function (o) {
     pensando.remove();
     if (!o.ok) {
-      if (o.sinIA || o.cuota) { IA = !o.sinIA && IA; burbuja('m', '<span class="nota">' + esc(o.error) + ' Uso el modo básico.</span>'); procesarLocal(texto); return; }
+      if (o.sinIA || o.cuota) { if (o.sinIA) fijarIA(false); burbuja('m', '<span class="nota">' + esc(o.error) + ' Uso el modo básico.</span>'); procesarLocal(texto); return; }
       burbuja('m', '<span class="err">' + esc(o.error || 'No se pudo.') + '</span>'); estado('Toca y habla'); return;
     }
     CHAT.m.push({ r: 'u', t: texto }, { r: 'm', t: o.texto }); chatGuardar();
@@ -561,11 +582,17 @@ function chatear(texto) {
     decir(o.texto, function () { if (/\?\s*$/.test(o.texto) && lsGet(LS.conf, true)) setTimeout(function () { escuchar(function (r) { if (r) chatear(r); else estado('Toca y habla'); }, true); }, 150); });
   }).catch(function (e) {
     pensando.remove();
-    // Si era un "si, guardalo", el servidor puede haberlo guardado igual: no se repite a ciegas.
+    // Sin senal solo se puede dejar anotado lo que se pidio guardar (se manda al volver la senal).
+    if (e.red || !navigator.onLine) {
+      burbuja('m', '<span class="nota">Sin conexión.</span>');
+      if (/^(recordatorio|tarea|visita|prosp|nota)$/.test(intencion(texto))) procesarLocal(texto); else estado('Sin conexión: pregúntame de nuevo cuando tengas señal.', 'err');
+      return;
+    }
+    // Ya se reintento con el mismo rid. Si era un "si, guardalo", puede haber quedado guardado.
     var conf = /^\s*(s[ií]\b|dale|ok|okey|gu[aá]rd|confirm|listo|claro)/i.test(texto);
-    burbuja('m', '<span class="nota">' + (e.red || !navigator.onLine ? 'Sin conexión.' : 'La IA no respondió a tiempo.')
-      + (conf ? ' Revisa en tus pendientes si quedó guardado antes de repetirlo.' : ' Uso el modo básico.') + '</span>');
-    if (conf) estado('Toca y habla'); else procesarLocal(texto);
+    burbuja('m', '<span class="nota">No me llegó la respuesta: Google está demorando. '
+      + (conf ? 'Revisa en tus pendientes si quedó guardado antes de repetirlo.' : 'Vuelve a preguntarme en unos segundos.') + '</span>');
+    estado('Toca y habla');
   });
 }
 function tarjetaChat(t) {
@@ -609,7 +636,7 @@ function abrirConfig() {
   function mostrar(o) {
     if (!o.ok) { $('cfgEst').textContent = o.error || 'No se pudo.'; return; }
     $('cfgEst').textContent = (o.configurada ? 'En uso: ' + o.enUso + ' · Claude ' + (o.claude ? 'con clave' : 'sin clave') + ' · Gemini ' + (o.gemini ? 'con clave' : 'sin clave') : 'Sin clave: se usa el modo básico.') + (o.prueba ? ' · Prueba: ' + o.prueba : '');
-    IA = !!o.configurada;
+    fijarIA(o.configurada);
   }
   function falla(e) { $('cfgEst').textContent = errTxt(e); }
   api('configIA', {}).then(mostrar, falla);
@@ -643,14 +670,13 @@ function iniciar() {
   $('cfg').onclick = abrirConfig;
   $('nueva').onclick = nuevaConversacion;
   $('formTxt').onsubmit = function (ev) { ev.preventDefault(); var t = $('txt').value.trim(); if (t) { $('txt').value = ''; $('txt').blur(); if (IA || !responder(t)) procesar(t); } };
-  pintarHist();
+  pintarHist(); fijarIA(IA);
   prepararClientes(); CLI.lista.forEach(function (c) { CLI_POR_RUT[c.r] = c; });
   api('inicio', {}).then(function (o) {
     if (!o.ok) return;
     $('who').textContent = o.nombre;
-    IA = !!o.ia; ADMIN = !!o.admin;
+    fijarIA(o.ia); ADMIN = !!o.admin;
     $('cfg').style.display = ADMIN ? 'inline-flex' : 'none';
-    $('nueva').style.display = IA ? 'inline-flex' : 'none';
     CLI = { lista: o.clientes || [], t: Date.now() }; lsSet(LS.cli, CLI); prepararClientes();
     CLI_POR_RUT = {}; CLI.lista.forEach(function (c) { CLI_POR_RUT[c.r] = c; });
     var b = $('badge'); b.style.display = o.pend ? 'inline-flex' : 'none'; b.innerHTML = '<b>' + o.pend + '</b> para hoy';
