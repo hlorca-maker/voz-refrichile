@@ -30,22 +30,75 @@ var NUM = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6
 function numero(w) { return /^\d+$/.test(w) ? +w : (NUM[w] || null); }
 
 // ------------------------------------------------------------------ API
-function api(accion, datos) {
-  var body = Object.assign({ t: lsGet(LS.t, ''), accion: accion }, datos || {});
-  // text/plain: Apps Script responde sin preflight de CORS.
-  return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
-    .then(function (r) { return r.json(); })
-    .then(function (o) { if (o && o.sinClave) mostrarSetup(); return o; });
+/* Dos filas de llamadas (25-09-2026). Medido ese dia: la API trabaja menos de 2 s por llamada
+   (panel de ejecuciones de Apps Script), pero Google tarda de 1 a 45 s en ENTREGAR la respuesta
+   y a veces la pierde (404), aunque se llame de a una. No es la concurrencia: un proyecto de
+   prueba de la misma cuenta aguanta 4 llamadas simultaneas en 1 s. Por eso lo que pide la
+   persona (opc.fondo falso) sale de inmediato, de a una, sin esperar lo de segundo plano; y lo
+   de segundo plano (calentar, refrescar el contador) va de a una y solo cuando no hay nada de
+   la persona en curso, para no leer dos veces en frio las mismas planillas. Cada llamada tiene
+   tope, para que una que se cuelgue no trabe su fila.
+   Cuando falla, el error dice que paso: e.red = no salio (sin senal); e.tope = no volvio a
+   tiempo; e.perdida = volvio 404 o ilegible (se perdio la respuesta, aunque la llamada SI se
+   ejecuto). Por eso solo las lecturas se reintentan, una vez: repetir un chat, una tarea o una
+   "hecha" puede dejarla dos veces. */
+var API_COLA = [], API_VUELO = { u: 0, f: 0 }, API_TOPE = 35000;
+var API_RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1 };
+function api(accion, datos, opc) {
+  opc = opc || {};
+  return new Promise(function (ok, mal) {
+    API_COLA.push({ accion: accion, datos: datos || {}, ms: opc.ms || API_TOPE, fila: opc.fondo ? 'f' : 'u', ok: ok, mal: mal });
+    apiSiguiente();
+  });
 }
+function apiSiguiente() {
+  var u = API_COLA.filter(function (x) { return x.fila === 'u'; })[0], f = API_COLA.filter(function (x) { return x.fila === 'f'; })[0];
+  if (u && !API_VUELO.u) apiLanzar(u);
+  if (f && !API_VUELO.f && !API_VUELO.u) apiLanzar(f);
+}
+function apiLanzar(x) {
+  API_COLA.splice(API_COLA.indexOf(x), 1); API_VUELO[x.fila]++;
+  // configIA con clave la guarda y la prueba: eso no se repite.
+  var releer = API_RELEER[x.accion] && !(x.accion === 'configIA' && 'clave' in x.datos);
+  function fin() { API_VUELO[x.fila]--; apiSiguiente(); }
+  Promise.resolve().then(function () { return apiUna(x.accion, x.datos, x.ms); })   // ni un error inesperado traba la fila
+    .catch(function (e) { if (releer && e.perdida) return apiUna(x.accion, x.datos, x.ms); throw e; })
+    .then(function (o) { fin(); x.ok(o); }, function (e) { fin(); x.mal(e); });
+}
+function apiUna(accion, datos, ms) {
+  var body = Object.assign({ t: lsGet(LS.t, ''), accion: accion }, datos);
+  var ctl = window.AbortController ? new AbortController() : null, reloj = ctl ? setTimeout(function () { ctl.abort(); }, ms) : 0;
+  function falla(tipo, txt) { var e = new Error(txt); e[tipo] = true; return e; }
+  // text/plain: Apps Script responde sin preflight de CORS.
+  return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined })
+    .then(function (r) {
+      return r.text().then(function (tx) {
+        var o = null; try { o = JSON.parse(tx); } catch (e) {}
+        if (!r.ok || !o || typeof o !== 'object') throw falla('perdida', 'Respuesta ' + r.status);
+        return o;
+      });
+    }, function (e) { throw e && e.name === 'AbortError' ? falla('tope', 'Sin respuesta a tiempo') : falla('red', 'Sin conexión'); })
+    .then(function (o) { clearTimeout(reloj); if (o.sinClave) mostrarSetup(); return o; },
+      function (e) { clearTimeout(reloj); if (e && e.name === 'AbortError') e = falla('tope', 'Sin respuesta a tiempo'); throw e; });
+}
+function errTxt(e) { return e && e.red ? 'Sin conexión.' : 'El CRM no respondió a tiempo. Intenta de nuevo.'; }
 
-// Cola sin conexion: lo que se guarda sin senal se manda solo al volver.
+/* Cola sin conexion: lo que se guarda sin senal se manda solo al volver. Si al mandarlo
+   vuelve sin respuesta (tope o 404), lo mas probable es que haya quedado guardado: se saca
+   de la cola y se avisa, en vez de mandarlo de nuevo y dejarlo dos veces. */
 function colaAgregar(accion, datos) { var c = lsGet(LS.cola, []); c.push({ a: accion, d: datos, t: Date.now() }); lsSet(LS.cola, c); }
+var COLA_ENVIANDO = false;
 function colaVaciar() {
-  var c = lsGet(LS.cola, []); if (!c.length || !navigator.onLine) return;
-  var x = c[0];
+  var c = lsGet(LS.cola, []); if (COLA_ENVIANDO || !c.length || !navigator.onLine) return;
+  var x = c[0]; COLA_ENVIANDO = true;
+  function sacar(txt) { var c2 = lsGet(LS.cola, []); c2.shift(); lsSet(LS.cola, c2); histAgregar(txt + (x.d.titulo || x.a)); }
   api(x.a, x.d).then(function (o) {
-    if (o && o.ok) { c.shift(); lsSet(LS.cola, c); histAgregar('Enviado (estaba sin conexión): ' + (x.d.titulo || x.a)); colaVaciar(); }
-  }).catch(function () {});
+    COLA_ENVIANDO = false;
+    if (o && o.ok) { sacar('Enviado (estaba sin conexión): '); colaVaciar(); }
+  }, function (e) {
+    COLA_ENVIANDO = false;
+    if (!e.red) { sacar('Sin confirmación, revisa tus pendientes: '); colaVaciar(); }
+  });
 }
 window.addEventListener('online', colaVaciar);
 
@@ -255,7 +308,7 @@ function consultar(tipo, q, cli, texto) {
       ? a.desc + ': ' + (a.precio ? Math.round(a.precio) + ' pesos más IVA, ' : 'sin precio de lista, ') + (o.cliente ? 'para ' + o.cliente : 'en ' + o.listaNom) + '. Stock ' + (a.stock || 0) + '.'
       : a.desc + ': ' + (a.stock || 0) + ' unidades.');
     histAgregar((tipo === 'precio' ? 'Precio: ' : 'Stock: ') + a.desc);
-  }).catch(function () { estado('Sin conexión.', 'err'); });
+  }).catch(function (e) { estado(errTxt(e), 'err'); });
 }
 
 function fichaCliente(cli, tipo, texto) {
@@ -282,7 +335,7 @@ function fichaCliente(cli, tipo, texto) {
       ? (c.fono ? 'El teléfono de ' + c.nombre + ' es ' + c.fono.split('').join(' ') : c.nombre + ' no tiene teléfono registrado')
       : (cs.length ? c.nombre + ' tiene ' + cs.length + (cs.length === 1 ? ' cotización abierta' : ' cotizaciones abiertas') : c.nombre + ' no tiene cotizaciones abiertas'));
     histAgregar('Cliente: ' + c.nombre);
-  }).catch(function () { estado('Sin conexión.', 'err'); });
+  }).catch(function (e) { estado(errTxt(e), 'err'); });
 }
 var CLI_POR_RUT = {};
 
@@ -406,7 +459,7 @@ function guardarBorrador() {
   var c = CLI_POR_RUT[b.cli];
   var datos = { titulo: b.titulo + (b.cot && b.titulo.indexOf(b.cot) < 0 ? ' (cot. ' + b.cot + ')' : ''), cliente: c ? c.n : '', fecha: b.fecha, hora: b.hora,
     detalle: b.detalle, prioridad: b.tipo === 'recordatorio' ? 'Alta' : 'Media', recordar: b.tipo === 'recordatorio' || !!b.hora, tipo: b.tipo, texto: b.detalle };
-  BORR = null; $('bSi').disabled = true; estado('Guardando…');
+  BORR = null; if ($('bSi')) $('bSi').disabled = true; estado('Guardando…');
   var ok = function () {
     var q = 'para ' + fechaTxt(datos.fecha) + (datos.hora ? ' a las ' + datos.hora : '');
     pintar('<div class="card"><h3>Guardado</h3><div class="n" style="font-weight:600">' + esc(datos.titulo) + '</div><div class="nota">' + esc(capital(q)) + (datos.cliente ? ' · ' + esc(datos.cliente) : '') + (datos.recordar ? ' · te llegará un aviso al teléfono' : '') + '</div></div>');
@@ -414,13 +467,20 @@ function guardarBorrador() {
   };
   if (!navigator.onLine) { colaAgregar('tarea', datos); ok(); estado('Sin conexión: se enviará al volver la señal.'); return; }
   api('tarea', datos).then(function (o) { if (o.ok) ok(); else { estado(o.error || 'No se pudo guardar.', 'err'); BORR = b; pintarBorrador(); } })
-    .catch(function () { colaAgregar('tarea', datos); ok(); estado('Sin conexión: se enviará al volver la señal.'); });
+    .catch(function (e) {
+      if (e.red) { colaAgregar('tarea', datos); ok(); estado('Sin conexión: se enviará al volver la señal.'); return; }
+      // Sin respuesta no quiere decir que no se guardo: no se manda de nuevo a ciegas.
+      estado('Sin confirmación del CRM.', 'err'); decir('No tuve confirmación. Revisa tus pendientes antes de repetirlo.');
+      BORR = b; pintarBorrador();
+      $('borr').insertAdjacentHTML('afterbegin', '<div class="nota err" style="margin:0 0 8px">No tuve confirmación del CRM: puede que haya quedado guardado. Revisa tus pendientes antes de tocar Guardar de nuevo.</div>'
+        + '<div class="acciones" style="margin:0 0 10px"><button type="button" class="btn s" onclick="BORR=null;verPendientes(false)">Ver mis pendientes</button></div>');
+    });
 }
 
 // ------------------------------------------------------------------ pendientes
 var PEND = [];
 function cargarPendientes(cb) {
-  api('pendientes', {}).then(function (o) {
+  api('pendientes', {}, { fondo: !cb }).then(function (o) {
     if (!o.ok) return; PEND = o.tareas || [];
     var n = PEND.filter(function (t) { return t.dias != null && t.dias <= 0; }).length, b = $('badge');
     b.style.display = n ? 'inline-flex' : 'none'; b.innerHTML = '<b>' + n + '</b> para hoy';
@@ -447,7 +507,7 @@ function marcarHecha(id) {
   api('hecha', { id: id }).then(function (o) {
     if (o.ok) { var t = PEND.filter(function (x) { return x.id === id; })[0]; histAgregar('✓ Hecha: ' + (t ? t.titulo : id)); decir('Listo.'); verPendientes(false); }
     else estado(o.error || 'No se pudo.', 'err');
-  });
+  }).catch(function (e) { estado(e.red ? 'Sin conexión: no se marcó.' : 'Sin confirmación del CRM: revisa tus pendientes antes de repetirlo.', 'err'); });
 }
 function cerrarPorVoz(texto, cli) {
   cargarPendientes(function () {
@@ -486,7 +546,7 @@ function chatear(texto) {
   burbuja('u', esc(texto));
   var pensando = burbuja('m pens', '<span></span><span></span><span></span>');
   estado('Pensando…');
-  api('chat', { texto: texto, historial: CHAT.m }).then(function (o) {
+  api('chat', { texto: texto, historial: CHAT.m }, { ms: 28000 }).then(function (o) {
     pensando.remove();
     if (!o.ok) {
       if (o.sinIA || o.cuota) { IA = !o.sinIA && IA; burbuja('m', '<span class="nota">' + esc(o.error) + ' Uso el modo básico.</span>'); procesarLocal(texto); return; }
@@ -499,7 +559,14 @@ function chatear(texto) {
     estado('Toca y habla');
     // Si la IA pregunta algo, se escucha la respuesta sin tener que tocar nada.
     decir(o.texto, function () { if (/\?\s*$/.test(o.texto) && lsGet(LS.conf, true)) setTimeout(function () { escuchar(function (r) { if (r) chatear(r); else estado('Toca y habla'); }, true); }, 150); });
-  }).catch(function () { pensando.remove(); burbuja('m', '<span class="nota">Sin conexión con la IA. Uso el modo básico.</span>'); procesarLocal(texto); });
+  }).catch(function (e) {
+    pensando.remove();
+    // Si era un "si, guardalo", el servidor puede haberlo guardado igual: no se repite a ciegas.
+    var conf = /^\s*(s[ií]\b|dale|ok|okey|gu[aá]rd|confirm|listo|claro)/i.test(texto);
+    burbuja('m', '<span class="nota">' + (e.red || !navigator.onLine ? 'Sin conexión.' : 'La IA no respondió a tiempo.')
+      + (conf ? ' Revisa en tus pendientes si quedó guardado antes de repetirlo.' : ' Uso el modo básico.') + '</span>');
+    if (conf) estado('Toca y habla'); else procesarLocal(texto);
+  });
 }
 function tarjetaChat(t) {
   var d = t.datos || {};
@@ -536,12 +603,18 @@ function nuevaConversacion() { CHAT = { t: 0, m: [] }; lsSet('voz_chat', CHAT); 
 // Configuracion de la IA: solo cuentas admin. La clave la pega la persona y va directo a la API.
 function abrirConfig() {
   pintar('<div class="card"><h3>Inteligencia artificial</h3><div class="nota" id="cfgEst">Consultando…</div>'
-    + '<div class="campo"><label for="cfgKey">Clave de Gemini (Google AI Studio)</label><input id="cfgKey" type="password" autocomplete="off" placeholder="Pega aquí la clave"></div>'
+    + '<div class="campo"><label for="cfgProv">Proveedor</label><select id="cfgProv"><option value="claude">Claude (Anthropic)</option><option value="gemini">Gemini (Google AI Studio)</option></select></div>'
+    + '<div class="campo"><label for="cfgKey">Clave</label><input id="cfgKey" type="password" autocomplete="off" placeholder="Pega aquí la clave"></div>'
     + '<div class="acciones"><button class="btn s" type="button" id="cfgQuitar">Quitar clave</button><button class="btn p" type="button" id="cfgGuardar">Guardar y probar</button></div></div>');
-  function mostrar(o) { $('cfgEst').textContent = o.ok ? ((o.configurada ? 'Configurada' + (o.modelo ? ' (' + o.modelo + ')' : '') : 'Sin clave: se usa el modo básico.') + (o.prueba ? ' · Prueba: ' + o.prueba : '')) : (o.error || 'No se pudo.'); IA = !!(o.ok && o.configurada); }
-  api('configIA', {}).then(mostrar);
-  $('cfgGuardar').onclick = function () { var k = $('cfgKey').value.trim(); if (!k) return; $('cfgEst').textContent = 'Guardando y probando…'; api('configIA', { clave: k, probar: true }).then(function (o) { $('cfgKey').value = ''; mostrar(o); }); };
-  $('cfgQuitar').onclick = function () { api('configIA', { clave: '' }).then(mostrar); };
+  function mostrar(o) {
+    if (!o.ok) { $('cfgEst').textContent = o.error || 'No se pudo.'; return; }
+    $('cfgEst').textContent = (o.configurada ? 'En uso: ' + o.enUso + ' · Claude ' + (o.claude ? 'con clave' : 'sin clave') + ' · Gemini ' + (o.gemini ? 'con clave' : 'sin clave') : 'Sin clave: se usa el modo básico.') + (o.prueba ? ' · Prueba: ' + o.prueba : '');
+    IA = !!o.configurada;
+  }
+  function falla(e) { $('cfgEst').textContent = errTxt(e); }
+  api('configIA', {}).then(mostrar, falla);
+  $('cfgGuardar').onclick = function () { var k = $('cfgKey').value.trim(); if (!k) return; $('cfgEst').textContent = 'Guardando y probando…'; api('configIA', { clave: k, proveedor: $('cfgProv').value, probar: true }).then(function (o) { $('cfgKey').value = ''; mostrar(o); }, falla); };
+  $('cfgQuitar').onclick = function () { api('configIA', { clave: '', proveedor: $('cfgProv').value }).then(mostrar, falla); };
 }
 
 // ------------------------------------------------------------------ pantalla
@@ -582,7 +655,10 @@ function iniciar() {
     CLI_POR_RUT = {}; CLI.lista.forEach(function (c) { CLI_POR_RUT[c.r] = c; });
     var b = $('badge'); b.style.display = o.pend ? 'inline-flex' : 'none'; b.innerHTML = '<b>' + o.pend + '</b> para hoy';
     colaVaciar();
-  }).catch(function () { estado('Sin conexión: puedes dictar igual, se enviará al volver la señal.'); });
+    // Despues de inicio y en segundo plano: deja listas las planillas para la primera pregunta
+    // (lo que pregunte la persona no espera a esto).
+    api('calentar', {}, { fondo: true }).catch(function () {});
+  }).catch(function (e) { estado(e.red ? 'Sin conexión: puedes dictar igual, se enviará al volver la señal.' : 'El CRM tardó en responder: puedes dictar igual.'); });
   // Abierta desde el icono o un acceso directo: a hablar de inmediato.
   var q = new URLSearchParams(location.search);
   if (q.get('modo') === 'pendientes') verPendientes(true);

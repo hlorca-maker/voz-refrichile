@@ -29,10 +29,12 @@ button,input,select,textarea{font:inherit;color:inherit}
 header{display:flex;align-items:center;gap:10px;padding:14px 16px 6px}
 header .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#0A6FE8,#3B9BFF);display:grid;place-items:center;flex:none}
 header .logo svg{width:17px;height:17px;fill:#fff}
-header .t{font-weight:700;font-size:16px;letter-spacing:-.01em}
+header .t{font-weight:700;font-size:16px;letter-spacing:-.01em;white-space:nowrap}
 header .who{font-size:12.5px;color:var(--mut)}
 header .sp{flex:1}
-.badge{display:none;align-items:center;gap:5px;border:1px solid var(--bord);background:var(--surf);border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer}
+.badge{display:none;align-items:center;gap:5px;border:1px solid var(--bord);background:var(--surf);border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+/* A 375 px, con los botones de la IA, el logo no cabe: el titulo y el contador se partian en dos lineas. */
+@media (max-width:400px){header .logo{display:none}}
 .badge b{color:var(--crit)}
 main{flex:1;display:flex;flex-direction:column;gap:14px;padding:6px 16px 22px;max-width:620px;width:100%;margin:0 auto}
 .mic-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;padding:18px 0 4px}
