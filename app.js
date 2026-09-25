@@ -210,15 +210,18 @@ function buscarClientes(frase, laxo) {
   var ws = norm(frase).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 1 && SUF.indexOf(' ' + w + ' ') < 0 && STOP_Q.indexOf(' ' + w + ' ') < 0; }), out = [];
   // Chrome a veces parte un nombre de fantasia en dos: "acondi termic" = aconditermic.
   var n0 = ws.length; for (var i = 0; i < n0 - 1; i++) { ws.push(ws[i] + ws[i + 1]); if (i < n0 - 2) ws.push(ws[i] + ws[i + 1] + ws[i + 2]); }
+  // Palabras de la frase que parecen nombre (largas, no de relleno): si un cliente no las tiene, resta.
+  var nom = ws.slice(0, n0).filter(function (w) { return w.length >= 4; });
   CLI.lista.forEach(function (c) {
     if (!c._t || !c._t.length) return;
-    var sc = 0, tot = 0, hit = 0, maxL = 0;
-    c._t.forEach(function (w) { var idf = IDF[w] || 1; tot += idf; if (ws.some(function (x) { return parecido(x, w); })) { sc += idf; hit++; if (w.length > maxL) maxL = w.length; } });
+    var sc = 0, tot = 0, hit = 0, maxL = 0, unicos = c._t.filter(function (w, i) { return c._t.indexOf(w) === i; });   // "Cancino y Cancino" cuenta una vez
+    unicos.forEach(function (w) { var idf = IDF[w] || 1; tot += idf; if (ws.some(function (x) { return parecido(x, w); })) { sc += idf; hit++; if (w.length > maxL) maxL = w.length; } });
     if (!hit) return;
     var cob = sc / tot;
     // Una sola palabra corta o que es solo parte del nombre no reconoce a un cliente ("ese" no es ESE SPA).
     if (!laxo && hit === 1 && cob < 1 && (maxL < 5 || cob < .5)) return;
-    if (laxo || sc >= 2.2 || cob >= .6) { c._cob = cob; out.push({ c: c, sc: sc + cob * 3 }); }
+    var faltan = nom.filter(function (x) { return !unicos.some(function (w) { return parecido(x, w); }); }).length;
+    if (laxo || sc >= 2.2 || cob >= .6) { c._cob = cob; out.push({ c: c, sc: sc + cob * 3 - faltan * 1.5 }); }
   });
   out.sort(function (a, b) { return b.sc - a.sc; });
   return out.slice(0, 4).map(function (x) { return x.c; });
@@ -273,6 +276,9 @@ var R = {
   cotizado: /\b(que (le |les )?(hemos |he |tengo |tiene |tenemos |les |le )?cotiz(ado|amos|aste|e)\b|productos?( \w+){0,2} cotizad\w*|tiene\w* cotizad\w*|que (hay|va|viene|tiene|trae) (en )?la cotizacion|detalle de (la )?cotizacion|que (le )?cotice|cotizado a|que le (estamos|estoy) cotizando)\b/,
   ventas: /\b(mis ventas|cuant[oa]s? (se )?(lleva\w*|llevo|hemos|he|va|van|vamos|voy) (vendid\w*|facturad\w*)|cuanto (vendi|vendimos|vendio|facturamos|facture)\b|cuantas ventas|ventas? (de |del )?(hoy|mes|ano|semana)|como voy\b|como vamos\b|vendido (este|del|en el) (mes|ano)|vendido hoy|facturacion del mes|cuanto (llevo|vamos|voy) (en )?(el )?mes|cuanto (he|hemos) vendido|lo vendido|mi facturacion)\b/,
   meta: /\b(mi meta|cual es (mi|la) meta|meta del mes|cuanto (me |nos )?falta (para|por) (la meta|vender|cumplir|llegar|facturar)|cuanto (me|nos) falta|como (voy|vamos) con la meta|avance de (la )?meta|(estoy|estamos|vamos a) (cumpliendo|llegando|llegar)|voy a llegar|cumpliendo la meta)\b/,
+  compras: /\b(cuanto (me |nos |le )?(ha|han|hemos|he) (comprado|vendido)|ultima compra|cuando (me |nos )?compro|que (me |nos )?(ha |han )?comprado|que compro\b|que le (hemos |he )?vendido|compras de|historial de compras|cuanto (me )?compra\b|cuanto (le )?(vendemos|vendo) a)\b/,
+  riesgo: /\b(clientes? (en riesgo|sin compras?|que no (me |nos )?(compran?|han comprado)|perdidos?|dormidos?|inactivos?|que dejaron de comprar)|quien(es)? no (me |nos )?(ha |han )?compra\w*|a quien(es)? (tengo que |debo |deberia )?(visitar|llamar|contactar)|que clientes (visito|llamo|debo visitar)|no me han comprado|dejaron de comprar)\b/,
+  mejores: /\b(mejores clientes|quien(es)? (me )?(ha |han )?comprado mas|top (de )?clientes|clientes que mas (me )?compran|mayores clientes|clientes mas grandes|quien compra mas)\b/,
   stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
   precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
   visita: /\b(visite|visitamos|estuve (con|en|donde)|fui (a|donde)|pase (a|por|donde)|me reuni|reunion con)\b/,
@@ -302,6 +308,9 @@ function intencion(t) {
   if (R.hecha.test(n)) return 'hecha';
   if (R.pend.test(n)) return 'pend';
   if (R.meta.test(n)) return 'meta';
+  if (R.riesgo.test(n)) return 'riesgo';
+  if (R.mejores.test(n)) return 'mejores';
+  if (R.compras.test(n)) return 'compras';
   if (R.ventas.test(n)) return 'ventas';
   if (R.cotizado.test(n)) return 'cotizado';
   // "Llama a Clima Norte" es llamar ahora; con fecha ("llamar a Clima Norte el martes") es una tarea.
@@ -461,7 +470,15 @@ function rapido(texto) {
   var clis = buscarClientes(texto), cli = clis[0] || null;
   var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
   if (tipo === 'pend') { $('vivo').textContent = texto; verPendientes(true); return true; }
-  if (tipo === 'ventas' || tipo === 'meta') { $('vivo').textContent = texto; verVentas(tipo); return true; }
+  if (tipo === 'ventas' || tipo === 'meta') { $('vivo').textContent = texto; verVentas(tipo, / hoy /.test(n) ? 'hoy' : / semana /.test(n) ? 'semana' : ''); return true; }
+  if (tipo === 'riesgo' || tipo === 'mejores') { $('vivo').textContent = texto; verCartera(tipo === 'mejores' ? (/ (ano|anual|este ano) /.test(n) ? 'mejores_anio' : 'mejores_mes') : 'riesgo'); return true; }
+  if (tipo === 'compras') {
+    if (!cli) { clis = buscarClientes(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
+    if (!cli) return false;
+    $('vivo').textContent = texto;
+    if (!claro) { elegirCliente(clis, 'compras'); return true; }
+    verCompras(cli); return true;
+  }
   if (tipo === 'cotizado') {
     var folioC = cotizacionDe(texto);
     if (!cli && !folioC) { clis = buscarClientes(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
@@ -496,7 +513,44 @@ function elegirCliente(clis, tipo) {
   }).join('') + '</div></div>');
   estado('¿Cuál de estos?'); decir('¿Cuál de estos? ' + clis.slice(0, 3).map(function (c) { return c.n; }).join(', '));
 }
-function verFicha(rut, tipo) { if (tipo === 'cotizado') return verCotizado(CLI_POR_RUT[rut], ''); var f = fichaLocal(rut); if (f) { pintarFicha(f, tipo); estado('Toca y habla'); } else if (CLI_POR_RUT[rut]) fichaCliente(CLI_POR_RUT[rut], tipo, ''); }
+function verFicha(rut, tipo) { if (tipo === 'cotizado') return verCotizado(CLI_POR_RUT[rut], ''); if (tipo === 'compras') return verCompras(CLI_POR_RUT[rut]); var f = fichaLocal(rut); if (f) { pintarFicha(f, tipo); estado('Toca y habla'); } else if (CLI_POR_RUT[rut]) fichaCliente(CLI_POR_RUT[rut], tipo, ''); }
+// Compras por cliente y cartera (riesgo / mejores): salen de DAT.ventas.clientes [rut, vendedor, mes, ano, ultima, productos, docs]
+function comprasDe(rut) {
+  var c = ((DAT.ventas && DAT.ventas.clientes) || []).filter(function (x) { return x[0] === rut; })[0]; if (!c) return null;
+  var p = c[4] ? c[4].split('-') : null, dias = p ? Math.round((hoy0().getTime() - new Date(+p[0], +p[1] - 1, +p[2]).getTime()) / 86400000) : null;
+  return { rut: rut, mes: c[2], anio: c[3], ult: c[4], dias: dias, prods: c[5] || [], docs: c[6] || 0 };
+}
+function carteraLocal(tipo) {
+  var out = ((DAT.ventas && DAT.ventas.clientes) || []).map(function (x) { var c = comprasDe(x[0]); c.nombre = (CLI_POR_RUT[x[0]] || {}).n || x[0]; return c; });
+  if (tipo === 'riesgo') return out.filter(function (c) { return c.anio > 0 && c.dias != null && c.dias >= 60; }).sort(function (a, b) { return b.anio - a.anio; });
+  if (tipo === 'mejores_mes') return out.filter(function (c) { return c.mes > 0; }).sort(function (a, b) { return b.mes - a.mes; });
+  return out.filter(function (c) { return c.anio > 0; }).sort(function (a, b) { return b.anio - a.anio; });
+}
+function conVentas(fn) {
+  if (DAT.ventas) return fn();
+  estado('Trayendo tus ventas…');
+  api('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) { estado(v.error || 'No se pudo.', 'err'); return; } DAT.ventas = v; lsSet('voz_ventas', { t: Date.now(), v: v }); fn(); }).catch(function (e) { estado(errTxt(e), 'err'); });
+}
+function verCompras(cli) {
+  conVentas(function () {
+    var c = comprasDe(cli.r) || { mes: 0, anio: 0, prods: [], docs: 0 };
+    pintar('<div class="card"><h3>Compras</h3><div style="font-weight:700;font-size:17px;margin-bottom:6px">' + esc(cli.n) + '</div><div class="fila"><div class="s">Este mes</div><div class="v">' + pesos(c.mes) + (c.docs ? '<small>' + c.docs + ' documentos</small>' : '') + '</div></div><div class="fila"><div class="s">En el año</div><div class="v">' + pesos(c.anio) + '</div></div><div class="fila"><div class="s">Última compra</div><div class="v">' + (c.ult ? esc(c.ult) + '<small>hace ' + c.dias + ' días</small>' : '—') + '</div></div>' + (c.prods.length ? '<div class="nota">Últimos productos: ' + esc(c.prods.join(' · ')) + '</div>' : '') + '</div>');
+    estado('Toca y habla');
+    var ult = c.ult ? (c.dias === 0 ? 'hoy' : c.dias === 1 ? 'ayer' : 'hace ' + c.dias + ' días') : 'sin fecha';
+    decir(!c.anio ? cli.n + ' no tiene compras este año.' : cli.n + (c.mes ? ' lleva ' + plataTxt(c.mes) + ' este mes y ' : ' no ha comprado este mes; lleva ') + plataTxt(c.anio) + ' en el año. Última compra ' + ult + (c.prods.length ? ': ' + c.prods.join(', ').toLowerCase() : '') + '.');
+    histAgregar('Compras: ' + cli.n);
+  });
+}
+function verCartera(sub) {
+  conVentas(function () {
+    var lista = carteraLocal(sub), per = sub === 'mejores_mes' ? 'mes' : 'anio', tit = sub === 'riesgo' ? 'Clientes en riesgo · ' + lista.length : sub === 'mejores_mes' ? 'Mejores clientes del mes' : 'Mejores clientes del año';
+    pintar('<div class="card"><h3>' + tit + '</h3>' + (lista.length ? lista.slice(0, 8).map(function (c) { return '<div class="fila" style="cursor:pointer" onclick="verFicha(\'' + esc(c.rut) + '\',\'contacto\')"><div><div class="n">' + esc(c.nombre) + '</div><div class="s">' + (c.ult ? 'última compra hace ' + c.dias + ' d' : 'sin compras') + '</div></div><div class="v">' + pesos(sub === 'riesgo' ? c.anio : c[per]) + '<small>' + (per === 'mes' && sub !== 'riesgo' ? 'este mes' : 'en el año') + '</small></div></div>'; }).join('') : '<div class="nota">Nada que mostrar.</div>') + '</div>');
+    estado('Toca y habla');
+    decir(sub === 'riesgo' ? (lista.length ? 'Tienes ' + lista.length + ' clientes sin compras hace más de 60 días. Los más importantes: ' + lista.slice(0, 5).map(function (c) { return c.nombre + ' (hace ' + c.dias + ' días, ' + plataTxt(c.anio) + ' en el año)'; }).join('; ') + '.' : 'No tienes clientes con compras en el año que lleven más de 60 días sin comprar.')
+      : (lista.length ? 'Tus mejores clientes del ' + (per === 'mes' ? 'mes' : 'año') + ': ' + lista.slice(0, 5).map(function (c, i) { return (i + 1) + ', ' + c.nombre + ' con ' + plataTxt(per === 'mes' ? c.mes : c.anio); }).join('; ') + '.' : 'Todavía no hay compras.'));
+    histAgregar(tit);
+  });
+}
 /* Productos cotizados, ventas y meta (25-09-2026, Humberto: "saber sobre productos cotizados a algun cliente,
    mis ventas, mi meta, cuanto me falta por vender"). Las lineas vienen con la copia; las ventas con la accion
    "ventas" (se piden despues de la copia y quedan en voz_ventas). Los textos hablados son los mismos del motor. */
@@ -517,24 +571,21 @@ function verCotizado(cli, folio) {
   decir(cots.length ? nom + ' tiene ' + cots.length + (cots.length === 1 ? ' cotización abierta. ' : ' cotizaciones abiertas. ') + frases.join(' ') : nom + ' no tiene cotizaciones abiertas.');
   histAgregar('Cotizado: ' + nom);
 }
-function ventasTxt(v, tipo) {
+function ventasTxt(v, tipo, periodo) {
   var d = new Date(), quedan = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate();
+  if (periodo === 'hoy' || periodo === 'semana') { var val = periodo === 'hoy' ? v.hoy : v.semana; return (v.equipo ? 'El equipo lleva ' : 'Llevas ') + (val ? plataTxt(val) : 'cero') + (periodo === 'hoy' ? ' facturado hoy' : ' esta semana') + '. En el mes, ' + plataTxt(v.mes) + (v.meta ? ' de una meta de ' + plataTxt(v.meta) + ' (' + v.avance + ' por ciento)' : '') + '.'; }
   var lleva = (v.equipo ? 'El equipo lleva ' : 'Este mes llevas ') + plataTxt(v.mes) + (v.docs ? ' en ' + v.docs + ' documentos' : '') + '.';
   var meta = v.meta ? ((v.equipo ? 'La meta del equipo es ' : 'Tu meta es ') + plataTxt(v.meta) + ': ' + (v.falta > 0 ? 'faltan ' + plataTxt(v.falta) + ' (' + v.avance + ' por ciento)' + (quedan ? ', con ' + quedan + ' días por delante' : '') : 'ya está cumplida') + '.') : 'No hay meta cargada este mes.';
   return (tipo === 'meta' ? meta + ' ' + lleva : lleva + ' ' + meta) + ' En el año, ' + plataTxt(v.anio) + '.';
 }
-function pintarVentas(v, tipo) {
+function pintarVentas(v, tipo, periodo) {
   var f = function (t, val) { return '<div class="fila"><div class="s">' + t + '</div><div class="v">' + val + '</div></div>'; };
-  var h = f('Vendido este mes', pesos(v.mes) + (v.docs ? '<small>' + v.docs + ' documentos</small>' : '')) + (v.meta ? f('Meta del mes', pesos(v.meta)) + f('Falta', pesos(v.falta) + '<small>' + (v.avance || 0) + '% de avance</small>') : f('Meta', '<small>sin meta cargada</small>')) + f('Vendido en el año', pesos(v.anio));
+  var h = (v.hoy != null ? f('Hoy', pesos(v.hoy)) + f('Esta semana', pesos(v.semana)) : '') + f('Vendido este mes', pesos(v.mes) + (v.docs ? '<small>' + v.docs + ' documentos</small>' : '')) + (v.meta ? f('Meta del mes', pesos(v.meta)) + f('Falta', pesos(v.falta) + '<small>' + (v.avance || 0) + '% de avance</small>') : f('Meta', '<small>sin meta cargada</small>')) + f('Vendido en el año', pesos(v.anio));
   if (v.equipo && v.vendedores) h += '<div style="margin-top:10px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--hint)">Por vendedor</div>' + v.vendedores.map(function (x) { return f(esc(x.nombre), pesos(x.mes) + (x.meta ? '<small>' + (x.avance || 0) + '% de ' + pesos(x.meta) + '</small>' : '')); }).join('');
   pintar('<div class="card"><h3>' + (v.equipo ? 'Ventas del equipo' : 'Mis ventas') + ' <span class="tag">' + esc(v.periodo || '') + '</span></h3>' + h + (v.hora ? '<div class="nota">Datos de las ' + esc(String(v.hora).slice(11)) + '</div>' : '') + '</div>');
-  estado('Toca y habla'); decir(ventasTxt(v, tipo)); histAgregar('Ventas del mes');
+  estado('Toca y habla'); decir(ventasTxt(v, tipo, periodo)); histAgregar('Ventas del mes');
 }
-function verVentas(tipo) {
-  if (DAT.ventas) return pintarVentas(DAT.ventas, tipo);
-  estado('Trayendo tus ventas…');
-  api('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) { estado(v.error || 'No se pudo.', 'err'); return; } DAT.ventas = v; lsSet('voz_ventas', { t: Date.now(), v: v }); pintarVentas(v, tipo); }).catch(function (e) { estado(errTxt(e), 'err'); });
-}
+function verVentas(tipo, periodo) { conVentas(function () { pintarVentas(DAT.ventas, tipo, periodo); }); }
 function ventasPedir() { api('ventas', {}, { fondo: true, plazo: 150000, releer: 2 }).then(function (v) { if (v.ok) { DAT.ventas = v; lsSet('voz_ventas', { t: Date.now(), v: v }); } }).catch(function () {}); }
 function procesarLocal(texto) {
   $('vivo').textContent = texto;

@@ -118,7 +118,12 @@
         }
       } else if (p.tipo === 'cual') {
         var c = this.elegirDe(texto, p.clis);
-        if (c) { if (p.para === 'borrador') { p.borrador.cli = c.r; return this.confirmar(p.borrador); } if (p.para === 'cotizado') { this.ult.cli = c; return M.cotizadoTxt(c.n, this.datos.cotizado(c.r)); } return p.para === 'cuando' ? this.cuando(texto, c) : this.conCliente(p.para, c); }
+        if (c) {
+          if (p.para === 'borrador') { p.borrador.cli = c.r; return this.confirmar(p.borrador); }
+          if (p.para === 'cotizado') { this.ult.cli = c; return M.cotizadoTxt(c.n, this.datos.cotizado(c.r)); }
+          if (p.para === 'compras') { var selfC = this; this.ult.cli = c; return this.conVentas(function () { return M.comprasTxt(c.n, selfC.datos.comprasDe(c.r)); }); }
+          return p.para === 'cuando' ? this.cuando(texto, c) : this.conCliente(p.para, c);
+        }
         if (M.siNo(texto) < 0) return 'Bien.';
       } else if (p.tipo === 'hecha') {
         s = M.siNo(texto);
@@ -136,11 +141,13 @@
     var t2 = texto;
     if (this.ult.cli && !this.cartera.buscar(texto).length && /\b(lo|la|le|los|les|ese|esa|ellos|ese cliente|esa empresa|con el|con ella|a el|a ella)\b/.test(n)) t2 = texto + ' ' + this.ult.cli.n;
     // 4) "cuando tengo que...", "a que hora": se contesta con los pendientes
-    if (/\b(cuando|a que hora|que dia|para cuando|para que dia)\b/.test(n) && !M.R.record.test(n) && !/\b(anota|apunta|agenda)/.test(n)) return this.cuando(t2);
+    if (/\b(cuando|a que hora|que dia|para cuando|para que dia)\b/.test(n) && !M.R.record.test(n) && !/\b(anota|apunta|agenda)/.test(n) && !M.R.compras.test(n) && !M.R.ventas.test(n)) return this.cuando(t2);
     var r = M.interpretar(t2, { datos: this.datos, cartera: this.cartera });
     if (r.tipo === 'saludo' || r.tipo === 'ayuda') return this._atenderTipo(r.tipo, n);
     if (r.tipo === 'pend') return this.decirPendientes();
-    if (r.tipo === 'ventas' || r.tipo === 'meta') return this.decirVentas(r.tipo);
+    if (r.tipo === 'ventas' || r.tipo === 'meta') return this.decirVentas(r.tipo, r.periodo);
+    if (r.tipo === 'riesgo' || r.tipo === 'mejores') { var self0 = this; return this.conVentas(function () { return M.carteraTxt(r.sub, self0.datos.cartera(r.sub)); }); }
+    if (r.tipo === 'compras') { var self1 = this; this.ult.cli = r.cli; return this.conVentas(function () { return M.comprasTxt(r.cli.n, self1.datos.comprasDe(r.cli.r)); }); }
     if (r.tipo === 'cotizado') {
       if (r.cli) this.ult.cli = r.cli;
       if (!r.resultado) return 'Todavía no tengo las cotizaciones en el teléfono; dame unos segundos.';
@@ -172,19 +179,20 @@
   };
   C.prototype._atenderTipo = function (tipo, n) {
     if (tipo === 'saludo') return this.saludo(n);
-    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección y lo cotizado a un cliente; tus ventas del mes, tu meta y cuánto te falta; tus pendientes; y guardar recordatorios, tareas y notas, o marcar tareas hechas. Por ejemplo: precio del R410A para Clima Norte; qué le cotizamos a Refritec; cómo voy con la meta; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
+    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección, lo cotizado y lo comprado por un cliente; tus ventas de hoy, la semana y el mes, tu meta y cuánto te falta; qué clientes llevan tiempo sin comprar y cuáles son los mejores; tus pendientes; y guardar recordatorios, tareas y notas. Por ejemplo: precio del R410A para Clima Norte; cuánto me ha comprado Refritec; clientes en riesgo; cómo voy con la meta; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
   };
-  // Ventas y meta: vienen con la copia (accion "ventas"); si aun no estan, se piden ahora.
-  C.prototype.decirVentas = function (tipo) {
+  // Ventas, meta, compras y cartera salen de la accion "ventas" (viene con la copia); si aun no esta, se pide ahora.
+  C.prototype.conVentas = function (fn) {
     var self = this;
-    if (this.datos.ventas) return M.ventasTxt(this.datos.ventas, tipo);
-    if (!this.enLinea() || !this.clave()) return 'Todavía no tengo tus ventas y no hay señal para traerlas.';
+    if (this.datos.ventas) return fn();
+    if (!this.enLinea() || !this.clave()) return 'Todavía no tengo las ventas en el teléfono y no hay señal para traerlas.';
     return this.api.llamar('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) {
       if (!v.ok) return v.error || 'No pude traer las ventas.';
       self.datos.usarVentas(v); if (self.alVentas) self.alVentas(v);
-      return M.ventasTxt(v, tipo);
+      return fn();
     }, function (e) { return e.red ? 'Sin señal para traer las ventas.' : 'No me llegaron las ventas; pregúntame de nuevo en unos segundos.'; });
   };
+  C.prototype.decirVentas = function (tipo, periodo) { var self = this; return this.conVentas(function () { return M.ventasTxt(self.datos.ventas, tipo, periodo); }); };
   C.prototype.saludo = function (n) {
     if (/gracias/.test(n)) return 'De nada. Aquí estoy.';
     if (/chao|adios|hasta luego|nos vemos/.test(n)) return 'Chao, que te vaya bien.';

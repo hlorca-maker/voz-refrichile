@@ -90,6 +90,10 @@
     // 25-09-2026 (Humberto): productos cotizados a un cliente, mis ventas, mi meta y cuanto me falta
     cotizado: /\b(que (le |les )?(hemos |he |tengo |tiene |tenemos |les |le )?cotiz(ado|amos|aste|e)\b|productos?( \w+){0,2} cotizad\w*|tiene\w* cotizad\w*|que (hay|va|viene|tiene|trae) (en )?la cotizacion|detalle de (la )?cotizacion|que (le )?cotice|cotizado a|que le (estamos|estoy) cotizando)\b/,
     ventas: /\b(mis ventas|cuant[oa]s? (se )?(lleva\w*|llevo|hemos|he|va|van|vamos|voy) (vendid\w*|facturad\w*)|cuanto (vendi|vendimos|vendio|facturamos|facture)\b|cuantas ventas|ventas? (de |del )?(hoy|mes|ano|semana)|como voy\b|como vamos\b|vendido (este|del|en el) (mes|ano)|vendido hoy|facturacion del mes|cuanto (llevo|vamos|voy) (en )?(el )?mes|cuanto (he|hemos) vendido|lo vendido|mi facturacion)\b/,
+    // compras de un cliente, cartera en riesgo y mejores clientes (25-09-2026)
+    compras: /\b(cuanto (me |nos |le )?(ha|han|hemos|he) (comprado|vendido)|ultima compra|cuando (me |nos )?compro|que (me |nos )?(ha |han )?comprado|que compro\b|que le (hemos |he )?vendido|compras de|historial de compras|cuanto (me )?compra\b|cuanto (le )?(vendemos|vendo) a)\b/,
+    riesgo: /\b(clientes? (en riesgo|sin compras?|que no (me |nos )?(compran?|han comprado)|perdidos?|dormidos?|inactivos?|que dejaron de comprar)|quien(es)? no (me |nos )?(ha |han )?compra\w*|a quien(es)? (tengo que |debo |deberia )?(visitar|llamar|contactar)|que clientes (visito|llamo|debo visitar)|no me han comprado|dejaron de comprar)\b/,
+    mejores: /\b(mejores clientes|quien(es)? (me )?(ha |han )?comprado mas|top (de )?clientes|clientes que mas (me )?compran|mayores clientes|clientes mas grandes|quien compra mas)\b/,
     meta: /\b(mi meta|cual es (mi|la) meta|meta del mes|cuanto (me |nos )?falta (para|por) (la meta|vender|cumplir|llegar|facturar)|cuanto (me|nos) falta|como (voy|vamos) con la meta|avance de (la )?meta|(estoy|estamos|vamos a) (cumpliendo|llegando|llegar)|voy a llegar|cumpliendo la meta)\b/,
     stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
     precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
@@ -122,6 +126,9 @@
     if (R.hecha.test(n)) return 'hecha';
     if (R.pend.test(n)) return 'pend';
     if (R.meta.test(n)) return 'meta';
+    if (R.riesgo.test(n)) return 'riesgo';
+    if (R.mejores.test(n)) return 'mejores';
+    if (R.compras.test(n)) return 'compras';
     if (R.ventas.test(n)) return 'ventas';
     if (R.cotizado.test(n)) return 'cotizado';
     if (R.llamar.test(n) && !M.leerFecha(t).iso) return 'llamar';           // con fecha es una tarea
@@ -168,6 +175,7 @@
   var STOP_Q = ' tengo tienes tiene tenemos que cuando como donde quien cual hora dia llamar llamarlo llamarla llamarle llamo llame llama hablar visitar visite enviar mandar precio precios stock telefono fono correo direccion cotizacion cotizaciones recuerdame recordatorio tarea nota anota manana hoy pasado semana mes para por con del las los una uno dos tres cuatro cinco seis siete ocho nueve diez cliente empresa datos ficha contacto marca marcar hecha hecho lista mejor sobre '
     + 'ese esa eso esto este esta estos estas aquel aquella puedes podrias quiero necesito quisiera guardar guardame agregar agregame crear creame registrar poner ponme favor recordar recordarme avisame hola gracias buenas buenos dias tardes noches busca buscar buscame dame dime muestrame aviso alarma pendiente pendientes ';
   function tokensCli(n) { return M.norm(n).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 2 && SUF.indexOf(' ' + w + ' ') < 0; }); }
+  M.tokensCli = tokensCli;
   function parecido(a, b) {
     if (a === b) return true;
     if (a.length < 6 || b.length < 6 || Math.abs(a.length - b.length) > 1) return false;
@@ -190,15 +198,18 @@
   M.Cartera.prototype.buscar = function (frase, laxo) {
     var idf = this.idf, ws = M.norm(frase).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 1 && SUF.indexOf(' ' + w + ' ') < 0 && STOP_Q.indexOf(' ' + w + ' ') < 0; }), out = [];
     var n0 = ws.length; for (var i = 0; i < n0 - 1; i++) { ws.push(ws[i] + ws[i + 1]); if (i < n0 - 2) ws.push(ws[i] + ws[i + 1] + ws[i + 2]); }
+    // Palabras de la frase que parecen nombre (largas, no de relleno): si un cliente no las tiene, resta.
+    var nom = ws.slice(0, n0).filter(function (w) { return w.length >= 4; });
     this.lista.forEach(function (c) {
       if (!c._t || !c._t.length) return;
-      var sc = 0, tot = 0, hit = 0, maxL = 0;
-      c._t.forEach(function (w) { var f = idf[w] || 1; tot += f; if (ws.some(function (x) { return parecido(x, w); })) { sc += f; hit++; if (w.length > maxL) maxL = w.length; } });
+      var sc = 0, tot = 0, hit = 0, maxL = 0, unicos = c._t.filter(function (w, i) { return c._t.indexOf(w) === i; });   // "Cancino y Cancino" cuenta una vez
+      unicos.forEach(function (w) { var f = idf[w] || 1; tot += f; if (ws.some(function (x) { return parecido(x, w); })) { sc += f; hit++; if (w.length > maxL) maxL = w.length; } });
       if (!hit) return;
       var cob = sc / tot;
       // Una sola palabra corta o que es solo parte del nombre no reconoce a un cliente ("ese" no es ESE SPA).
       if (!laxo && hit === 1 && cob < 1 && (maxL < 5 || cob < .5)) return;
-      if (laxo || sc >= 2.2 || cob >= .6) { c._cob = cob; out.push({ c: c, sc: sc + cob * 3 }); }
+      var faltan = nom.filter(function (x) { return !unicos.some(function (w) { return parecido(x, w); }); }).length;
+      if (laxo || sc >= 2.2 || cob >= .6) { c._cob = cob; out.push({ c: c, sc: sc + cob * 3 - faltan * 1.5 }); }
     });
     out.sort(function (a, b) { return b.sc - a.sc; });
     return out.slice(0, 4).map(function (x) { return x.c; });
@@ -230,7 +241,42 @@
     this.cot = o.cot || []; this.cotLineas = o.cotLineas || []; this.tareas = o.tareas || [];
     return this;
   };
-  M.Datos.prototype.usarVentas = function (v, t) { this.ventas = v || null; this.ventasT = t || Date.now(); };
+  M.Datos.prototype.usarVentas = function (v, t) {
+    this.ventas = v || null; this.ventasT = t || Date.now(); this.compras = {};
+    var self = this, hoy = M.hoy0();
+    ((v && v.clientes) || []).forEach(function (c) { self.compras[c[0]] = { rut: c[0], vc: c[1], mes: c[2], anio: c[3], ult: c[4], dias: c[4] ? Math.round((hoy.getTime() - M.diasFecha(c[4]).getTime()) / 86400000) : null, prods: c[5] || [], docs: c[6] || 0 }; });
+  };
+  M.diasFecha = function (iso) { var p = String(iso).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
+  // Un cliente puede tener varias cuentas (ruts) con el mismo nombre en el ERP: si la elegida no tiene compras, se mira otra con el mismo nombre.
+  M.Datos.prototype.comprasDe = function (rut) {
+    var c = (this.compras || {})[rut]; if (c) return c;
+    var cl = this.cliMap[rut], self = this; if (!cl) return null;
+    // Se comparan las palabras distintivas ("SOC." / "SOCIEDAD", "LTDA" / "LIMITADA" no cuentan).
+    var lim = function (s) { return M.tokensCli(s).join(' '); }, n = lim(cl.n);
+    var otro = n && Object.keys(this.compras || {}).filter(function (r) { var o = self.cliMap[r]; return o && lim(o.n) === n; })[0];
+    return otro ? this.compras[otro] : null;
+  };
+  // Cartera con compras: en riesgo (sin compras hace >= dias, ordenados por lo que compran en el ano) o mejores (mes/ano).
+  M.Datos.prototype.cartera = function (tipo, dias) {
+    var self = this, out = Object.keys(this.compras || {}).map(function (r) { var c = self.compras[r]; c.nombre = (self.cliMap[r] || {}).n || r; return c; });
+    if (tipo === 'riesgo') return out.filter(function (c) { return c.anio > 0 && c.dias != null && c.dias >= (dias || 60); }).sort(function (a, b) { return b.anio - a.anio; });
+    if (tipo === 'mejores_mes') return out.filter(function (c) { return c.mes > 0; }).sort(function (a, b) { return b.mes - a.mes; });
+    return out.filter(function (c) { return c.anio > 0; }).sort(function (a, b) { return b.anio - a.anio; });
+  };
+  M.comprasTxt = function (nombre, c) {
+    if (!c || !c.anio) return nombre + ' no tiene compras este año.';
+    var ult = c.ult ? (c.dias === 0 ? 'hoy' : c.dias === 1 ? 'ayer' : 'hace ' + c.dias + ' días') : 'sin fecha';
+    return nombre + (c.mes ? ' lleva ' + M.plataTxt(c.mes) + ' este mes' + (c.docs ? ' en ' + c.docs + (c.docs === 1 ? ' documento' : ' documentos') : '') + ' y ' : ' no ha comprado este mes; lleva ') + M.plataTxt(c.anio) + ' en el año. Última compra ' + ult + (c.prods.length ? ': ' + c.prods.map(function (p) { return p.toLowerCase(); }).join(', ') : '') + '.';
+  };
+  M.carteraTxt = function (tipo, lista, dias) {
+    if (tipo === 'riesgo') {
+      if (!lista.length) return 'No tienes clientes con compras en el año que lleven más de ' + (dias || 60) + ' días sin comprar.';
+      return 'Tienes ' + lista.length + (lista.length === 1 ? ' cliente' : ' clientes') + ' sin compras hace más de ' + (dias || 60) + ' días. ' + (lista.length > 1 ? 'Los más importantes: ' : '') + lista.slice(0, 5).map(function (c) { return c.nombre + ' (hace ' + c.dias + ' días, ' + M.plataTxt(c.anio) + ' en el año)'; }).join('; ') + '.';
+    }
+    var per = tipo === 'mejores_mes' ? 'mes' : 'año';
+    if (!lista.length) return 'Todavía no hay compras este ' + per + '.';
+    return 'Tus mejores clientes del ' + per + ': ' + lista.slice(0, 5).map(function (c, i) { return (i + 1) + ', ' + c.nombre + ' con ' + M.plataTxt(per === 'mes' ? c.mes : c.anio); }).join('; ') + '.';
+  };
   // Cotizaciones abiertas de un cliente (o una por folio) con sus productos.
   M.Datos.prototype.cotizado = function (rut, folio) {
     var porK = {};
@@ -246,9 +292,13 @@
     return s + a + ' pesos';
   };
   // Que decir de las ventas (vendedor o equipo). tipo 'meta' pone el foco en lo que falta.
-  M.ventasTxt = function (v, tipo) {
+  M.ventasTxt = function (v, tipo, periodo) {
     if (!v) return 'Todavía no tengo las ventas.';
     var d = new Date(), quedan = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate();
+    if (periodo === 'hoy' || periodo === 'semana') {
+      var val = periodo === 'hoy' ? v.hoy : v.semana;
+      return (v.equipo ? 'El equipo lleva ' : 'Llevas ') + (val ? M.plataTxt(val) : 'cero') + (periodo === 'hoy' ? ' facturado hoy' : ' esta semana') + '. En el mes, ' + M.plataTxt(v.mes) + (v.meta ? ' de una meta de ' + M.plataTxt(v.meta) + ' (' + v.avance + ' por ciento)' : '') + '.';
+    }
     var lleva = (v.equipo ? 'El equipo lleva ' : 'Este mes llevas ') + M.plataTxt(v.mes) + (v.docs ? ' en ' + v.docs + (v.docs === 1 ? ' documento' : ' documentos') : '') + (v.equipo ? ' este mes' : '') + '.';
     var meta = v.meta ? ((v.equipo ? 'La meta del equipo es ' : 'Tu meta es ') + M.plataTxt(v.meta) + ': ' + (v.falta > 0 ? (v.equipo ? 'faltan ' : 'te faltan ') + M.plataTxt(v.falta) + ' (' + v.avance + ' por ciento)' : 'ya está cumplida (' + v.avance + ' por ciento)') + (v.falta > 0 && quedan ? ', con ' + quedan + (quedan === 1 ? ' día' : ' días') + ' por delante' : '') + '.') : (v.equipo ? 'No hay meta cargada este mes.' : 'No tienes meta cargada para este mes.');
     var eq = v.equipo && v.vendedores ? ' ' + v.vendedores.map(function (x) { return x.nombre.split(' ')[0] + ' ' + M.plataTxt(x.mes) + (x.meta ? ' (' + (x.avance || 0) + '%)' : ''); }).join(', ') + '.' : '';
@@ -338,7 +388,14 @@
     var clis = cartera.buscar(texto), cli = clis[0] || null;
     var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
     if (tipo === 'pend') return { tipo: 'pend' };
-    if (tipo === 'ventas' || tipo === 'meta') return { tipo: tipo, resultado: datos.ventas || null };
+    if (tipo === 'ventas' || tipo === 'meta') return { tipo: tipo, resultado: datos.ventas || null, periodo: / hoy /.test(n) ? 'hoy' : / (esta |la )?semana /.test(n) ? 'semana' : '' };
+    if (tipo === 'riesgo' || tipo === 'mejores') return { tipo: tipo, sub: tipo === 'mejores' ? (/ (ano|anual|este ano) /.test(n) ? 'mejores_anio' : 'mejores_mes') : 'riesgo', resultado: datos.ventas ? datos.cartera(tipo === 'mejores' ? (/ (ano|anual|este ano) /.test(n) ? 'mejores_anio' : 'mejores_mes') : 'riesgo') : null };
+    if (tipo === 'compras') {
+      if (!cli) { clis = cartera.buscar(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
+      if (!cli) return { tipo: 'ia', motivo: 'sin cliente' };
+      if (!claro) return { tipo: 'elegir', clis: clis, para: 'compras' };
+      return { tipo: 'compras', cli: cli, resultado: datos.ventas ? (datos.comprasDe(cli.r) || { anio: 0 }) : null };
+    }
     if (tipo === 'cotizado') {
       var folio = M.cotizacionDe(texto);
       if (!cli && !folio) { clis = cartera.buscar(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }

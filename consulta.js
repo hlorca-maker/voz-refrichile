@@ -144,17 +144,20 @@
       else { var con = [], sin = []; top.forEach(function (x, i) { (x.stock > 0 ? con : sin).push({ x: x, d: i === 0 ? x.desc : dd[i] }); });
         decir(con.length ? con.map(function (p) { return p.d + ': ' + p.x.stock + ' unidades'; }).join('. ') + '.' + (sin.length ? ' Sin stock: ' + sin.map(function (p) { return p.d; }).join(', ') + '.' : '') : a.desc + ': sin stock.'); }
     }
-    function cardVentas(tipo) {
+    function conVentas(fn) {
+      if (datos.ventas) return fn();
+      pintar(card('Ventas', '<div class="vc-nota">Trayendo tus ventas…</div>'));
+      api.llamar('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) return aviso(v.error || 'No se pudo.', true); datos.usarVentas(v); alm.set('ventas', { t: Date.now(), v: v }); fn(); }).catch(function (e) { aviso(M.errTxt(e), true); });
+    }
+    function cardVentas(tipo, periodo) {
       function pintarV(v) {
         var f = function (t, val) { return '<div class="vc-fila"><div class="s">' + t + '</div><div class="v">' + val + '</div></div>'; };
         var h = f('Vendido este mes', pesos(v.mes) + (v.docs ? '<small>' + v.docs + ' documentos</small>' : '')) + (v.meta ? f('Meta del mes', pesos(v.meta)) + f('Falta', pesos(v.falta) + '<small>' + (v.avance || 0) + '% de avance</small>') : f('Meta', '<small>sin meta cargada</small>')) + f('Vendido en el año', pesos(v.anio));
         if (v.equipo && v.vendedores) h += '<div class="vc-h" style="margin-top:8px">Por vendedor</div>' + v.vendedores.map(function (x) { return f(esc(x.nombre), pesos(x.mes) + (x.meta ? '<small>' + (x.avance || 0) + '% de ' + pesos(x.meta) + '</small>' : '')); }).join('');
-        pintar(card(v.equipo ? 'Ventas del equipo' : 'Mis ventas', h + '<div class="vc-nota">' + esc(v.periodo || '') + (v.hora ? ' · datos de las ' + esc(String(v.hora).slice(11)) : '') + '</div>', ''));
-        decir(M.ventasTxt(v, tipo));
+        pintar(card(v.equipo ? 'Ventas del equipo' : 'Mis ventas', (v.hoy != null ? f('Hoy', pesos(v.hoy)) + f('Esta semana', pesos(v.semana)) : '') + h + '<div class="vc-nota">' + esc(v.periodo || '') + (v.hora ? ' · datos de las ' + esc(String(v.hora).slice(11)) : '') + '</div>', ''));
+        decir(M.ventasTxt(v, tipo, periodo));
       }
-      if (datos.ventas) return pintarV(datos.ventas);
-      pintar(card('Ventas', '<div class="vc-nota">Trayendo tus ventas…</div>'));
-      api.llamar('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) return aviso(v.error || 'No se pudo.', true); datos.usarVentas(v); alm.set('ventas', { t: Date.now(), v: v }); pintarV(v); }).catch(function (e) { aviso(M.errTxt(e), true); });
+      conVentas(function () { pintarV(datos.ventas); });
     }
     function cardNoProd(q) { pintar(card('Producto', '<div class="vc-nota">No encontré “' + esc(q) + '”. Prueba con otras palabras o el código.</div>')); decir('No encontré ese producto'); }
     function cardFicha(o, para) {
@@ -295,7 +298,13 @@
       var r = M.interpretar(texto, { datos: datos, cartera: cartera });
       if (r.tipo === 'saludo' || r.tipo === 'ayuda') { var m0 = r.tipo === 'saludo' ? 'Hola. ¿Qué necesitas? Precios, stock, datos de un cliente, tus pendientes o un recordatorio.' : 'Puedo decirte precio y stock de un producto; teléfono, dirección y cotizaciones abiertas de un cliente; tus pendientes; y guardar recordatorios, tareas y notas. Por ejemplo: “precio del R410A para Clima Norte”, “teléfono de Refritec”, “recuérdame llamar a Frío Sur mañana a las 10”.'; pintar(card(r.tipo === 'saludo' ? 'Hola' : 'Qué puedo hacer', '<div class="vc-nota">' + esc(m0) + '</div>')); decir(m0); return; }
       if (r.tipo === 'pend') return cardPend(true);
-      if (r.tipo === 'ventas' || r.tipo === 'meta') return cardVentas(r.tipo);
+      if (r.tipo === 'ventas' || r.tipo === 'meta') return cardVentas(r.tipo, r.periodo);
+      if (r.tipo === 'riesgo' || r.tipo === 'mejores' || r.tipo === 'compras') return conVentas(function () {
+        if (r.tipo === 'compras') { var cc = datos.comprasDe(r.cli.r) || { anio: 0, mes: 0, prods: [] }; pintar(card('Compras', '<div class="vc-nom">' + esc(r.cli.n) + '</div><div class="vc-fila"><div class="s">Este mes</div><div class="v">' + pesos(cc.mes) + '</div></div><div class="vc-fila"><div class="s">En el año</div><div class="v">' + pesos(cc.anio) + '</div></div><div class="vc-fila"><div class="s">Última compra</div><div class="v">' + (cc.ult ? esc(cc.ult) + '<small>hace ' + cc.dias + ' días</small>' : '—') + '</div></div>' + (cc.prods && cc.prods.length ? '<div class="vc-nota">Últimos productos: ' + esc(cc.prods.join(' · ')) + '</div>' : ''))); decir(M.comprasTxt(r.cli.n, datos.comprasDe(r.cli.r))); return; }
+        var lista = datos.cartera(r.sub), per = r.sub === 'mejores_mes' ? 'mes' : 'anio';
+        pintar(card(r.tipo === 'riesgo' ? 'Clientes en riesgo · ' + lista.length : r.sub === 'mejores_mes' ? 'Mejores clientes del mes' : 'Mejores clientes del año', lista.length ? lista.slice(0, 8).map(function (c) { return '<div class="vc-fila" data-acc="ficha" data-rut="' + esc(c.rut) + '" data-para="contacto" style="cursor:pointer"><div><div class="n">' + esc(c.nombre) + '</div><div class="s">' + (c.ult ? 'última compra hace ' + c.dias + ' d' : 'sin compras') + '</div></div><div class="v">' + pesos(r.tipo === 'riesgo' ? c.anio : c[per]) + '<small>' + (r.tipo === 'riesgo' ? 'en el año' : per === 'mes' ? 'este mes' : 'en el año') + '</small></div></div>'; }).join('') : '<div class="vc-nota">Nada que mostrar.</div>'));
+        decir(M.carteraTxt(r.sub, lista));
+      });
       if (r.tipo === 'cotizado') {
         if (!r.resultado) return aviso('Todavía no tengo las cotizaciones en este equipo.', true);
         var nomC = r.cli ? r.cli.n : (r.folio ? 'Cotización ' + r.folio : '');
