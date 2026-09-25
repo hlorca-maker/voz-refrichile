@@ -193,12 +193,21 @@
     return (hoy.length ? 'Tienes ' + hoy.length + ' para hoy: ' + lista + (hoy.length > 3 ? '; y ' + (hoy.length - 3) + ' más' : '') + '.' : 'Nada para hoy.')
       + (prox.length ? ' ' + (hoy.length ? 'Además, ' : '') + prox.length + (prox.length === 1 ? ' pendiente próximo: ' : ' próximos: ') + prox.slice(0, 2).map(function (t) { return t.titulo + ' ' + self.cuandoTxt(t); }).join('; ') + '.' : '');
   };
+  /* Varios productos parecidos se dicen todos (hasta 3), primero los que tienen stock y nombrando lo que
+     los distingue: "R507 bombona 11.3 Kg: 1995 unidades. Sin stock: la de 10 Kg." */
   C.prototype.decirProductos = function (tipo, o) {
-    var a = o.items[0], mas = o.items.length - 1; this.ult.prod = a;
-    return (tipo === 'precio'
-      ? a.desc + ': ' + (a.precio ? Math.round(a.precio) + ' pesos más IVA, ' : 'sin precio de lista, ') + (o.cliente ? 'para ' + o.cliente : 'en ' + o.listaNom) + '. Stock ' + (a.stock || 0) + '.'
-      : a.desc + ': ' + (a.stock || 0) + ' unidades' + (a.bod && a.bod.length > 1 ? ' (' + a.bod.map(function (b) { return b.s + ' en ' + b.b; }).join(', ') + ')' : '') + '.')
-      + (mas > 0 ? ' Hay ' + mas + (mas === 1 ? ' producto parecido' : ' parecidos') + ' más.' : '');
+    var its = o.items.slice(0, 3), a = its[0], mas = o.items.length - its.length, d = M.distintivos(its); this.ult.prod = a;
+    function bod(x) { return x.bod && x.bod.length > 1 ? ' (' + x.bod.map(function (b) { return b.s + ' en ' + b.b; }).join(', ') + ')' : ''; }
+    if (tipo === 'stock') {
+      var con = [], sin = [];
+      its.forEach(function (x, i) { (x.stock > 0 ? con : sin).push({ x: x, d: i === 0 ? x.desc : d[i] }); });
+      if (!con.length) return a.desc + ': sin stock' + (its.length > 1 ? ', ni ' + sin.slice(1).map(function (p) { return p.d; }).join(' ni ') : '') + '.';
+      return con.map(function (p) { return p.d + ': ' + p.x.stock + ' unidades' + bod(p.x); }).join('. ') + '.'
+        + (sin.length ? ' Sin stock: ' + sin.map(function (p) { return p.d; }).join(', ') + '.' : '') + (mas > 0 ? ' Y ' + mas + ' más.' : '');
+    }
+    var otros = its.slice(1).map(function (x, i) { return d[i + 1] + (x.precio ? ' a ' + Math.round(x.precio) : ' sin precio') + (x.stock ? ', stock ' + x.stock : ', sin stock'); });
+    return a.desc + ': ' + (a.precio ? Math.round(a.precio) + ' pesos más IVA, ' : 'sin precio de lista, ') + (o.cliente ? 'para ' + o.cliente : 'en ' + o.listaNom) + '. Stock ' + (a.stock || 0) + '.'
+      + (otros.length ? ' También ' + otros.join('; ') + '.' : '') + (mas > 0 ? ' Y ' + mas + ' más.' : '');
   };
   C.prototype.conCliente = function (para, c) {
     this.ult.cli = c;

@@ -137,8 +137,10 @@
     function cardProductos(tipo, o) {
       var h = filasProd(tipo, o) + (o.local && datos.hora ? '<div class="vc-nota">Datos de las ' + esc(datos.hora.slice(11)) + '</div>' : '');
       pintar(card(tipo === 'precio' ? 'Precio' : 'Stock', h, tipo === 'precio' ? (o.listaNom || '') + (o.cliente ? ' · ' + o.cliente : '') : ''));
-      var a = o.items[0];
-      decir(tipo === 'precio' ? a.desc + ': ' + (a.precio ? Math.round(a.precio) + ' pesos más IVA, ' : 'sin precio de lista, ') + (o.cliente ? 'para ' + o.cliente : 'en ' + o.listaNom) + '. Stock ' + (a.stock || 0) + '.' : a.desc + ': ' + (a.stock || 0) + ' unidades.');
+      var a = o.items[0], top = o.items.slice(0, 3), dd = M.distintivos(top);
+      if (tipo === 'precio') decir(a.desc + ': ' + (a.precio ? Math.round(a.precio) + ' pesos más IVA, ' : 'sin precio de lista, ') + (o.cliente ? 'para ' + o.cliente : 'en ' + o.listaNom) + '. Stock ' + (a.stock || 0) + '.');
+      else { var con = [], sin = []; top.forEach(function (x, i) { (x.stock > 0 ? con : sin).push({ x: x, d: i === 0 ? x.desc : dd[i] }); });
+        decir(con.length ? con.map(function (p) { return p.d + ': ' + p.x.stock + ' unidades'; }).join('. ') + '.' + (sin.length ? ' Sin stock: ' + sin.map(function (p) { return p.d; }).join(', ') + '.' : '') : a.desc + ': sin stock.'); }
     }
     function cardNoProd(q) { pintar(card('Producto', '<div class="vc-nota">No encontré “' + esc(q) + '”. Prueba con otras palabras o el código.</div>')); decir('No encontré ese producto'); }
     function cardFicha(o, para) {

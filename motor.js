@@ -149,6 +149,7 @@
     s = s.replace(/ (precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|a cuanto|valor (de|del)|stock|hay stock|hay disponible|disponibilidad|cuant[oa]s? (hay|quedan|tenemos)|tenemos|tienen|tengo) /g, ' ');
     if (cli && cli._t) { cli._t.forEach(function (w) { s = s.replace(new RegExp(' ' + w + ' ', 'g'), ' '); }); s = s.replace(/ (para|a|al|del|de) (cliente )?\s*$/, ' '); s = s.replace(/ para (el cliente )?$/, ' '); }
     s = s.replace(/ erre /g, ' r ').replace(/ r ?-? ?(\d{2,3}) ?([a-z])?(?= )/g, function (x, n, l) { return ' r' + n + (l || '') + ' '; });
+    s = s.replace(/ (refrigerante|gas|bombona|freon) (\d{2,3}[a-z]?)(?= )/g, ' $1 r$2 ');       // "refrigerante 507" = r507
     s = s.replace(/ (dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta)(?= )/g, function (x, w) { return ' ' + NUM[w]; });
     s = s.replace(/(\d) (coma|punto) (\d)/g, '$1.$3').replace(/(\d) y medi[oa](?= )/g, '$1.5');
     return s.replace(/ (de|del|para|el|la|un|una)(?= )/g, ' ').replace(/ (de|del|para|el|la|un|una)(?= )/g, ' ').replace(/\s+/g, ' ').trim();
@@ -245,7 +246,19 @@
     });
     res.sort(function (a, b) { return b.sc - a.sc || a.it.desc.length - b.it.desc.length; });
     if (res.length) { var top = res[0].sc; res = res.filter(function (x) { return x.sc >= top - 1.5; }); }
+    // Entre los que calzan igual de bien, primero los que tienen stock (Humberto, 25-09-2026: "me responde
+    // justo con el que no hay, siendo que hay uno con mucho stock").
+    res.sort(function (a, b) { return ((b.it.stock > 0) - (a.it.stock > 0)) || b.sc - a.sc || a.it.desc.length - b.it.desc.length; });
     return res.slice(0, max || 5).map(function (x) { return x.it; });
+  };
+  // Lo que distingue a cada producto entre varios parecidos: las palabras que no comparten todos
+  // ("GENERICO R507 GAS REFRIGERANTE BOMBONA 11.3 Kg" y "... 10 Kg" -> "11.3 Kg" y "10 Kg").
+  M.distintivos = function (items) {
+    var ws = items.map(function (x) { return String(x.desc).split(/\s+/); });
+    if (ws.length < 2) return items.map(function (x) { return x.desc; });
+    var comunes = ws[0].filter(function (w) { return ws.every(function (l) { return l.indexOf(w) >= 0; }); });
+    // Un numero se queda con su unidad ("10 Kg", "5 CFM"), aunque la unidad sea comun a todos.
+    return ws.map(function (l, i) { var d = l.filter(function (w, j) { return comunes.indexOf(w) < 0 || (j > 0 && /^\d/.test(l[j - 1]) && comunes.indexOf(l[j - 1]) < 0 && w.length <= 4); }).join(' '); return d || items[i].desc; });
   };
   M.Datos.prototype.precioDe = function (it, lista) {
     var li = this.cols.indexOf(lista), base = this.cols.indexOf('PrecioBase');

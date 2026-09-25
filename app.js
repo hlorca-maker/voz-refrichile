@@ -336,6 +336,7 @@ function productoDe(t, cli) {
   if (cli) { cli._t.forEach(function (w) { s = s.replace(new RegExp(' ' + w + ' ', 'g'), ' '); }); s = s.replace(/ (para|a|al|del|de) (cliente )?\s*$/, ' '); s = s.replace(/ para (el cliente )?$/, ' '); }
   // Refrigerantes como los dicta Chrome: "erre 410 a", "R 410 A", "r-32" -> r410a, r32
   s = s.replace(/ erre /g, ' r ').replace(/ r ?-? ?(\d{2,3}) ?([a-z])?(?= )/g, function (x, n, l) { return ' r' + n + (l || '') + ' '; });
+  s = s.replace(/ (refrigerante|gas|bombona|freon) (\d{2,3}[a-z]?)(?= )/g, ' $1 r$2 ');       // "refrigerante 507" = r507
   // Numeros dictados: "cinco cfm" = "5 cfm", "cuatro coma cinco" = "4.5" (un/una son articulos, no se tocan)
   s = s.replace(/ (dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta)(?= )/g, function (x, w) { return ' ' + NUM[w]; });
   s = s.replace(/(\d) (coma|punto) (\d)/g, '$1.$3').replace(/(\d) y medi[oa](?= )/g, '$1.5');
@@ -399,7 +400,16 @@ function buscarProd(q, tipo, max) {
   });
   res.sort(function (a, b) { return b.sc - a.sc || a.it.desc.length - b.it.desc.length; });
   if (res.length) { var top = res[0].sc; res = res.filter(function (x) { return x.sc >= top - 1.5; }); }
+  // Entre los que calzan igual de bien, primero los que tienen stock (Humberto, 25-09-2026).
+  res.sort(function (a, b) { return ((b.it.stock > 0) - (a.it.stock > 0)) || b.sc - a.sc || a.it.desc.length - b.it.desc.length; });
   return res.slice(0, max || 5).map(function (x) { return x.it; });
+}
+function distintivos(items) {
+  var ws = items.map(function (x) { return String(x.desc).split(/\s+/); });
+  if (ws.length < 2) return items.map(function (x) { return x.desc; });
+  var comunes = ws[0].filter(function (w) { return ws.every(function (l) { return l.indexOf(w) >= 0; }); });
+  // Un numero se queda con su unidad ("10 Kg", "5 CFM"), aunque la unidad sea comun a todos.
+  return ws.map(function (l, i) { var d = l.filter(function (w, j) { return comunes.indexOf(w) < 0 || (j > 0 && /^\d/.test(l[j - 1]) && comunes.indexOf(l[j - 1]) < 0 && w.length <= 4); }).join(' '); return d || items[i].desc; });
 }
 // Respuestas con la forma que devuelve la API, para pintarlas con las mismas funciones.
 function precioLocal(q, cli) {
@@ -498,10 +508,14 @@ function pintarProductos(tipo, o) {
       + '<div class="v">' + (tipo === 'precio' ? pesos(x.precio) + '<small>+ IVA · stock ' + (x.stock || 0) + '</small>' : (x.stock || 0) + '<small>unidades</small>') + '</div></div>';
   }).join('');
   pintar('<div class="card"><h3>' + cab + '</h3>' + filas + (o.local && DAT.hora ? '<div class="nota">Datos de las ' + esc(DAT.hora.slice(11)) + '</div>' : '') + '</div>');
-  var a = its[0];
-  decir(tipo === 'precio'
-    ? a.desc + ': ' + (a.precio ? Math.round(a.precio) + ' pesos más IVA, ' : 'sin precio de lista, ') + (o.cliente ? 'para ' + o.cliente : 'en ' + o.listaNom) + '. Stock ' + (a.stock || 0) + '.'
-    : a.desc + ': ' + (a.stock || 0) + ' unidades.');
+  var a = its[0], top = its.slice(0, 3), d = distintivos(top);
+  if (tipo === 'precio') decir(a.desc + ': ' + (a.precio ? Math.round(a.precio) + ' pesos más IVA, ' : 'sin precio de lista, ') + (o.cliente ? 'para ' + o.cliente : 'en ' + o.listaNom) + '. Stock ' + (a.stock || 0) + '.');
+  else {
+    // Varios parecidos: se dicen los que tienen stock y cuales no ("R507 11.3 Kg: 1995. Sin stock: 10 Kg").
+    var con = [], sin = [];
+    top.forEach(function (x, i) { (x.stock > 0 ? con : sin).push({ x: x, d: i === 0 ? x.desc : d[i] }); });
+    decir(con.length ? con.map(function (p) { return p.d + ': ' + p.x.stock + ' unidades'; }).join('. ') + '.' + (sin.length ? ' Sin stock: ' + sin.map(function (p) { return p.d; }).join(', ') + '.' : '') : a.desc + ': sin stock.');
+  }
   histAgregar((tipo === 'precio' ? 'Precio: ' : 'Stock: ') + a.desc);
 }
 function consultar(tipo, q, cli, texto) {
