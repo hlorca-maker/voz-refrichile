@@ -77,7 +77,7 @@ function escuchar(confirmacion) {
   modoConfirmar = confirmacion || null;
   rec = new SR(); rec.lang = 'es-CL'; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
   var final = '';
-  rec.onstart = function () { escuchando = true; $('mic').classList.add('on'); estado(modoConfirmar ? '¿Lo guardo? Di "sí" o "no"' : 'Te escucho…'); $('vivo').textContent = ''; };
+  rec.onstart = function () { escuchando = true; $('mic').classList.add('on'); estado(modoConfirmar ? 'Te escucho: sí, no, o qué cambio' : 'Te escucho…'); $('vivo').textContent = ''; };
   rec.onresult = function (ev) {
     var t = '';
     for (var i = ev.resultIndex; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) final += ev.results[i][0].transcript; }
@@ -296,10 +296,11 @@ function tarjetaTarea(tipo, texto, clis) {
   if (tipo === 'prosp') titulo = 'Prospección' + (cli ? ': ' + cli.n : '') ;
   if (!f.iso) f.iso = iso(hoy0());
   BORR = { tipo: tipo, titulo: titulo, detalle: texto, fecha: f.iso, hora: f.hora || (tipo === 'recordatorio' ? '09:00' : ''), clis: clis, cli: cli ? cli.r : '', cot: cot };
+  HECHA_PEND = null; RESP_INTENTOS = 0;
   pintarBorrador();
   var lo = { recordatorio: 'el recordatorio', tarea: 'la tarea', visita: 'la visita', prosp: 'la prospección', nota: 'la nota' }[tipo];
   var frase = 'Guardo ' + lo + ' para ' + fechaTxt(BORR.fecha) + (BORR.hora && tipo === 'recordatorio' ? ' a las ' + BORR.hora : '') + (cli ? ', ' + cli.n : '') + '. ¿Lo guardo?';
-  if (lsGet(LS.conf, true)) decir(frase, function () { setTimeout(function () { if (BORR) escuchar(confirmarVoz); }, 150); });
+  preguntar(frase);
 }
 function pintarBorrador() {
   var b = BORR, opts = '<option value="">— Sin cliente —</option>' + b.clis.concat(b.cli && !b.clis.some(function (c) { return c.r === b.cli; }) ? [CLI_POR_RUT[b.cli]] : []).filter(Boolean)
@@ -326,13 +327,75 @@ function leerBorrador() {
   BORR.titulo = $('bTit').value.trim(); BORR.cli = $('bCli').value === '*' ? '' : $('bCli').value;
   BORR.fecha = $('bFec').value || iso(hoy0()); BORR.hora = $('bHor').value; BORR.detalle = $('bDet').value.trim();
 }
-function confirmarVoz(t) {
-  var n = norm(t);
-  if (/\b(si|dale|guarda\w*|ok|okay|confirm\w*|ya|listo|correcto|perfecto)\b/.test(n)) guardarBorrador();
-  else if (/\b(no|cancela\w*|borra\w*|nada)\b/.test(n)) cancelarBorrador();
-  else estado('Revisa y toca Guardar');
+/* ===== CONVERSACION (25-09-2026) =====
+   Humberto: "no interpreta si le digo 'no lo guardes', solo el 'no' exacto". Con una tarjeta
+   abierta, lo que se diga (o se escriba) es una RESPUESTA a esa tarjeta, no una orden nueva:
+   si o no en sus formas naturales, y correcciones: "no, para el jueves a las 4", "mejor
+   manana", "es una visita", "el cliente es Refrimas", "agrega que piden 20 bombas",
+   "que diga llamar por el precio". Todo aca mismo en el telefono: sin servicios pagados. */
+var SI_RX = /\b(si|sip|dale|guard\w*|anot\w*|registr\w*|agend\w*|ok|okey|okay|confirm\w*|ya|listo|correcto|perfecto|de acuerdo|claro|hazlo|bueno|exacto|esta bien|asi esta bien|por favor)\b/;
+var NO_RX = /\b(no|nop|cancel\w*|borr\w*|olvid\w*|descart\w*|elimin\w*|nada|dejalo|deja eso|mejor no|equivoqu\w*)\b/;
+var HECHA_PEND = null, RESP_INTENTOS = 0;
+function hayPregunta() { return !!(BORR || HECHA_PEND); }
+function preguntar(frase) {
+  estado(frase);
+  if (lsGet(LS.conf, true)) decir(frase, function () { setTimeout(function () { if (hayPregunta()) escuchar(respuestaVoz); }, 150); });
 }
-function cancelarBorrador() { BORR = null; pintar(''); estado('Toca y habla'); }
+function respuestaVoz(t) {
+  t = String(t || '').trim();
+  if (!t) { estado(BORR ? 'Toca Guardar, o el micrófono para responder' : 'Toca y habla'); return; }
+  if (!responder(t)) procesar(t);
+}
+// Que dijo sobre guardar: +1 si, -1 no, 0 no queda claro. Gana lo que dijo primero
+// ("si, no hay problema" es un si).
+function siNo(n) {
+  if (/\bno (me |te |se )?olvid/.test(n)) return 1;                        // "no te olvides" = si
+  if (/\bno (lo |la |le )?(guard|anot|registr|agend|grab)\w*/.test(n)) return -1;
+  if (/\bno hay problema\b/.test(n)) return 1;
+  var a = n.search(SI_RX), b = n.search(NO_RX);
+  if (a < 0 && b < 0) return 0;
+  if (a < 0) return -1;
+  if (b < 0) return 1;
+  return a < b ? 1 : -1;
+}
+function responder(texto) {
+  var n = ' ' + norm(texto) + ' ';
+  if (HECHA_PEND) {
+    var r0 = siNo(n), t = HECHA_PEND;
+    if (r0 > 0) { HECHA_PEND = null; marcarHecha(t.id); return true; }
+    if (r0 < 0) { HECHA_PEND = null; pintar(''); estado('Toca y habla'); decir('Bien, no la marco.'); return true; }
+    return false;                                                            // otra cosa: orden nueva
+  }
+  if (!BORR) return false;
+  leerBorrador(); var b = BORR, cambios = [];
+  // 1) Correcciones (tienen prioridad: "no, para el jueves" corrige, no descarta)
+  var f = leerFecha(texto);
+  if (f.iso && f.iso !== b.fecha) { b.fecha = f.iso; cambios.push('para ' + fechaTxt(f.iso)); }
+  if (f.hora && f.hora !== b.hora) { b.hora = f.hora; cambios.push('a las ' + f.hora); }
+  var mt = n.match(/ (?:es|sea|que sea|sera|como|cambia\w*(?: a)?|pasa\w*(?: a)?|hazlo|dejalo) (?:una? |como )?(recordatorio|tarea|visita|nota|prospeccion) /);
+  if (mt) {
+    var tp = mt[1] === 'prospeccion' ? 'prosp' : mt[1];
+    if (tp !== b.tipo) { b.tipo = tp; if (tp === 'recordatorio' && !b.hora) b.hora = '09:00'; cambios.push('como ' + mt[1]); }
+  }
+  if (/ (sin cliente|ningun cliente) /.test(n)) { if (b.cli) { b.cli = ''; cambios.push('sin cliente'); } }
+  else if (/ (el cliente|cliente es|es para|es de|para el cliente|con el cliente|a nombre de) /.test(n)) {
+    var cs = buscarClientes(texto).filter(function (c) { return c.r !== b.cli; });
+    if (cs.length) { b.clis = cs.concat(b.clis.filter(function (c) { return cs.indexOf(c) < 0; })).slice(0, 5); b.cli = cs[0].r; cambios.push('cliente ' + cs[0].n); }
+  }
+  var ma = texto.match(/\b(?:agr[eé]ga(?:le)?|a[nñ]ade(?:le)?|an[oó]ta(?:le)?|p[oó]nle)\s+(?:que\s+|como\s+detalle\s+)?(.+)$/i);
+  if (ma && !f.iso && !f.hora && !mt) { b.detalle = (b.detalle ? b.detalle.replace(/[.\s]+$/, '') + '. ' : '') + capital(ma[1]); cambios.push('agregué el detalle'); }
+  var mq = texto.match(/\b(?:que diga|el t[ií]tulo es|en vez de eso|mejor que diga)\s+(.+)$/i);
+  if (mq) { b.titulo = capital(mq[1]); cambios.push('cambié el texto'); }
+  if (cambios.length) { RESP_INTENTOS = 0; pintarBorrador(); preguntar('Listo, ' + cambios.join(', ') + '. ¿Lo guardo?'); return true; }
+  // 2) Si o no
+  var r = siNo(n);
+  if (r > 0) { guardarBorrador(); return true; }
+  if (r < 0) { cancelarBorrador(); decir('Bien, no lo guardo.'); return true; }
+  // 3) No quedo claro: se pregunta una vez mas y despues se deja la tarjeta
+  if (++RESP_INTENTOS <= 1) { preguntar('No te entendí. Di sí para guardar, no para descartar, o dime qué cambio.'); return true; }
+  estado('Revisa la tarjeta y toca Guardar o Cancelar'); return true;
+}
+function cancelarBorrador() { BORR = null; RESP_INTENTOS = 0; pintar(''); estado('Toca y habla'); }
 function guardarBorrador() {
   leerBorrador(); var b = BORR; if (!b) return;
   if (!b.titulo) { estado('Falta qué hay que hacer.', 'err'); return; }
@@ -376,6 +439,7 @@ function verPendientes(hablar) {
   });
 }
 function marcarHecha(id) {
+  HECHA_PEND = null;
   api('hecha', { id: id }).then(function (o) {
     if (o.ok) { var t = PEND.filter(function (x) { return x.id === id; })[0]; histAgregar('✓ Hecha: ' + (t ? t.titulo : id)); decir('Listo.'); verPendientes(false); }
     else estado(o.error || 'No se pudo.', 'err');
@@ -393,7 +457,7 @@ function cerrarPorVoz(texto, cli) {
     var t = cand[0].t;
     pintar('<div class="card"><h3>Marcar como hecha</h3><div class="n" style="font-weight:600">' + esc(t.titulo) + '</div><div class="nota">' + esc(t.cliente || '') + '</div>'
       + '<div class="acciones"><button class="btn s" type="button" onclick="verPendientes(false)">Otra</button><button class="btn ok" type="button" onclick="marcarHecha(\'' + esc(t.id) + '\')">Hecha</button></div></div>');
-    decir('¿Marco como hecha: ' + t.titulo + '?', function () { escuchar(function (r) { if (/\b(si|dale|ok|ya|listo|marca\w*)\b/.test(norm(r))) marcarHecha(t.id); }); });
+    BORR = null; HECHA_PEND = t; preguntar('¿Marco como hecha: ' + t.titulo + '?');
   });
 }
 
@@ -418,9 +482,9 @@ function iniciar() {
   $('app').classList.remove('oculto');
   $('ejemplos').innerHTML = EJEMPLOS.map(function (e) { return '<button type="button">' + esc(e) + '</button>'; }).join('');
   $('ejemplos').onclick = function (ev) { var b = ev.target.closest('button'); if (b) { $('txt').value = b.textContent; $('txt').focus(); } };
-  $('mic').onclick = function () { if (window.speechSynthesis) speechSynthesis.cancel(); escuchar(); };
+  $('mic').onclick = function () { if (window.speechSynthesis) speechSynthesis.cancel(); escuchar(hayPregunta() ? respuestaVoz : null); };
   $('badge').onclick = function () { verPendientes(false); };
-  $('formTxt').onsubmit = function (ev) { ev.preventDefault(); var t = $('txt').value.trim(); if (t) { $('txt').value = ''; $('txt').blur(); procesar(t); } };
+  $('formTxt').onsubmit = function (ev) { ev.preventDefault(); var t = $('txt').value.trim(); if (t) { $('txt').value = ''; $('txt').blur(); if (!responder(t)) procesar(t); } };
   pintarHist();
   prepararClientes(); CLI.lista.forEach(function (c) { CLI_POR_RUT[c.r] = c; });
   api('inicio', {}).then(function (o) {
