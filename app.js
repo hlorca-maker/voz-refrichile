@@ -912,6 +912,8 @@ function iniciar() {
       CLI_POR_RUT = {}; CLI.lista.forEach(function (c) { CLI_POR_RUT[c.r] = c; });
     }
     if (!PEND_T) { var b = $('badge'); b.style.display = o.pend ? 'inline-flex' : 'none'; b.innerHTML = '<b>' + o.pend + '</b> para hoy'; }
+    // ?modo=config abre directo la pantalla de la clave de la IA (solo admin).
+    if (new URLSearchParams(location.search).get('modo') === 'config') { if (ADMIN) abrirConfig(); else estado('La configuración de la IA es solo para administradores.', 'err'); }
   }).catch(function (e) { estado(e.red ? 'Sin conexión: respondo con los datos del teléfono; lo que guardes se enviará al volver la señal.' : 'El CRM tardó en responder: puedes dictar igual.'); });
   // La copia de datos, en segundo plano (la fila "f" espera a que "inicio" vuelva) y cada 20 min.
   datosPedir(true);
