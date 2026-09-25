@@ -11,6 +11,17 @@
   var cola = new M.Cola(api, alm, { alListo: function (x, o) { cerebro.colaListo(x, o); }, alFallo: function (x, err) { decir((x.a === 'tarea' ? 'Ojo: no quedó guardado en el CRM: ' : 'Ojo: no se marcó como hecha: ') + x.txt + '. ' + err); } });
   var cerebro = new window.VozCerebro({ datos: datos, cartera: cartera, api: api, cola: cola, alm: alm, clave: function () { return alm.get('t', ''); } });
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition, rec = null, escuchando = false, VOZ = null, ocupado = false, SEGUIR = alm.get('seguir', true);
+  var ULT_DICHO = '', ULT_TEXTO = '', ULT_T = 0;
+  // El microfono a veces oye a la propia app ("...¿lo guardo?" contiene "guardo" = si). Lo que se
+  // parece mucho a lo recien dicho por la app se ignora; lo mismo repetido en 4 s tambien.
+  function esEco(t) {
+    if (!ULT_DICHO) return false;
+    var a = M.norm(t).split(' ').filter(function (w) { return w.length > 2; }), b = ' ' + M.norm(ULT_DICHO) + ' ';
+    if (a.length < 3) return false;
+    var c = a.filter(function (w) { return b.indexOf(' ' + w + ' ') >= 0; }).length;
+    return c / a.length >= .7;
+  }
+  function repetido(t) { var r = t === ULT_TEXTO && Date.now() - ULT_T < 4000; ULT_TEXTO = t; ULT_T = Date.now(); return r; }
 
   // ---------------------------------------------------------------- pantalla
   function fase(f) { document.body.className = f || ''; }
@@ -28,7 +39,7 @@
   function decir(texto, luego) {
     if (!window.speechSynthesis || !texto) { if (luego) luego(); return; }
     try {
-      speechSynthesis.cancel(); fase('hablando');
+      speechSynthesis.cancel(); fase('hablando'); ULT_DICHO = texto;
       var u = new SpeechSynthesisUtterance(texto.replace(/\$/g, '').replace(/(\d)\.(\d{3})/g, '$1$2'));
       u.lang = 'es-CL'; if (VOZ) u.voice = VOZ; u.rate = 1.05;
       var hecho = false; function fin() { if (hecho) return; hecho = true; if (document.body.className === 'hablando') fase(''); if (luego) luego(); }
@@ -54,6 +65,7 @@
     rec.onend = function () {
       escuchando = false; if (document.body.className === 'escuchando') fase('');
       var t = (fin || parcial || '').trim();
+      if (t && (esEco(t) || repetido(t))) { t = ''; caption(ULT_DICHO, true); }
       if (t) atender(t); else if (!ocupado) estado('Toca la esfera y habla');     // la ultima respuesta sigue a la vista
     };
     try { rec.start(); } catch (e) { estado('Toca la esfera para hablar.'); }
@@ -69,7 +81,7 @@
       if (!r.dicho) { estado('Toca la esfera y habla', ''); return; }
       estado(r.seguir ? 'Responde cuando quieras' : ''); caption(r.dicho, true); chipTel(r.tel);
       decir(r.dicho, function () {
-        if (r.seguir || SEGUIR) { setTimeout(function () { if (!ocupado && !escuchando) escuchar(true); }, 250); }
+        if (r.seguir || SEGUIR) { setTimeout(function () { if (!ocupado && !escuchando) escuchar(true); }, 600); }
         else estado('Toca la esfera y habla');
       });
     }, function (e) { clearTimeout(aviso); ocupado = false; estado('Algo falló: ' + (e && e.message || e), 'error'); });
@@ -95,7 +107,8 @@
   cargarGuardados();
   if (!alm.get('t', '')) { estado('Falta tu enlace de acceso: ábrelo una vez en este teléfono.', 'error'); return; }
   cola.vaciar(); pedirDatos(true);
-  api.llamar('inicio', {}, { fondo: true }).then(function (o) { if (o.ok) { $('who').textContent = o.nombre; if (!datos.t && o.clientes) cartera.cargar(o.clientes); } }).catch(function () {});
+  api.llamar('inicio', {}, { fondo: true }).then(function (o) { if (o.ok) { $('who').textContent = o.nombre; cerebro.nombre = o.nombre; alm.set('nombre', o.nombre); if (!datos.t && o.clientes) cartera.cargar(o.clientes); if (!o.ia) cerebro.ia = false; } }).catch(function () {});
+  cerebro.nombre = alm.get('nombre', '');
   cerebro.refrescarPendientes();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
   if (new URLSearchParams(location.search).get('mic') === '1') setTimeout(function () { escuchar(false); }, 400);

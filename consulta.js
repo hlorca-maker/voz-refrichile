@@ -277,6 +277,7 @@
         BORR = null;                                              // otra cosa: orden nueva
       }
       var r = M.interpretar(texto, { datos: datos, cartera: cartera });
+      if (r.tipo === 'saludo' || r.tipo === 'ayuda') { var m0 = r.tipo === 'saludo' ? 'Hola. ¿Qué necesitas? Precios, stock, datos de un cliente, tus pendientes o un recordatorio.' : 'Puedo decirte precio y stock de un producto; teléfono, dirección y cotizaciones abiertas de un cliente; tus pendientes; y guardar recordatorios, tareas y notas. Por ejemplo: “precio del R410A para Clima Norte”, “teléfono de Refritec”, “recuérdame llamar a Frío Sur mañana a las 10”.'; pintar(card(r.tipo === 'saludo' ? 'Hola' : 'Qué puedo hacer', '<div class="vc-nota">' + esc(m0) + '</div>')); decir(m0); return; }
       if (r.tipo === 'pend') return cardPend(true);
       if (r.tipo === 'precio' || r.tipo === 'stock') {
         if (r.resultado) return cardProductos(r.tipo, r.resultado);

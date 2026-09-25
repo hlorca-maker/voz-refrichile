@@ -85,7 +85,7 @@
     pend: /\b(que tengo( pendiente\w*| que hacer)?( para| de)? (hoy|manana|esta semana)|que tengo pendiente\w*|(mis|los|las) (pendientes|tareas|recordatorios)|que me toca|pendientes (de|para) (hoy|manana)|que hay (para|de) hoy|mi agenda|agenda de hoy)\b|^ que tengo $|^ pendientes $/,
     record: /\b(recuerd\w*|recordatorio|recordar|avisame|acuerdame|no (me )?olvid\w*)\b/,
     llamar: /^ (quiero |necesito |voy a |hay que )?(llama\w*|marca\w*) (a |al |la |el |con )?/,
-    contacto: /\b(telefono|fono|celular|numero de (telefono|contacto)|correo|mail|email|direccion|donde queda|ubicacion|contacto de|datos de|ficha de)\b/,
+    contacto: /\b(telefono|fono|celular|numero de (telefono|contacto)|correo|mail|email|direccion|donde queda|ubicacion|contacto de|datos (de|del)|ficha (de|del)|que sabes de|informacion (de|del))\b/,
     cotiz: /\b(cotizaciones?( abiertas| pendientes)? (de|del|a|para)|que (le )?(tengo |he )?cotizad\w*|que le cotice)\b/,
     stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
     precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
@@ -93,8 +93,27 @@
     prosp: /\b(prospect\w*|nuevo (negocio|cliente|proyecto)|oportunidad|posible (cliente|negocio)|potencial cliente)\b/,
     tarea: /\b(tarea|tengo que|hay que|debo|volver a (llamar|consultar|contactar|visitar|escribir|cotizar)|llamar a|consultar a|enviar|mandar|agendar)\b/
   };
+  // Cortesias y rodeos al inicio ("hola, me puedes guardar un recordatorio para...") -> la orden pelada
+  // ("recuerdame ..."), para que la intencion y el titulo salgan limpios.
+  M.limpiarOrden = function (t) {
+    var s = ' ' + String(t == null ? '' : t).trim() + ' ';
+    s = s.replace(/^\s*(hola|oye|oiga|por favor|porfa|mira|a ver|ok|bueno|entonces)[,.]?\s+(?=\S)/i, ' ');   // solo si sigue algo ("ok" solo es un si)
+    s = s.replace(/^\s*(me )?(puedes|podr[ií]as|quiero que|necesito que|quisiera que|quiero|necesito|quisiera|me gustar[ií]a que|me gustar[ií]a|ay[uú]dame a|te pido que|por favor)\s+/i, ' ');
+    s = s.replace(/^\s*(guarda(r|rme|me)?|agrega(r|rme|me)?|crea(r|rme|me)?|pon(er|erme|me)?|registra(r|rme|me)?|agenda(r|rme|me)?|anota(r|rme|me)?|hacer|haz(me)?)\s+(un |una |el |la )?(recordatorio|aviso|alarma)\s*(para que|para|de que|de|que|:)?\s*/i, ' recuérdame ');
+    s = s.replace(/^\s*(un |una )?(recordatorio|aviso)\s+(para que|para|de que|de|que)\s+/i, ' recuérdame ');
+    s = s.replace(/^\s*(guarda(r|rme|me)?|agrega(r|rme|me)?|crea(r|rme|me)?|pon(er|erme|me)?|registra(r|rme|me)?|anota(r|rme|me)?)\s+(una |la )?tarea\s*(para que|para|de que|de|que|:)?\s*/i, ' tengo que ');
+    s = s.replace(/^\s*(guarda(r|rme|me)?|agrega(r|rme|me)?|crea(r|rme|me)?|pon(er|erme|me)?|registra(r|rme|me)?|deja(r|rme|me)?|toma(r)?)\s+(una |la )?nota\s*(de que|de|que|:)?\s*/i, ' anota que ');
+    s = s.replace(/^\s*(recordarme|que me recuerdes|recu[eé]rdame que|recu[eé]rdame de|recu[eé]rdame)\s+/i, ' recuérdame ');
+    s = s.replace(/^\s*(buscar|busca|buscame|b[uú]scame|consultar|consulta|ver|revisar|revisa)\s+(los |las |el |la )?(datos|informaci[oó]n|info|ficha)\s+(de |del |de la )?(cliente |empresa )?/i, ' datos de ');
+    return s.replace(/\s+/g, ' ').trim();
+  };
   M.intencion = function (t) {
     var R = M.R, n = ' ' + M.norm(t) + ' ';
+    // Saludos y despedidas cortos, y "que puedes hacer": se contestan, no se adivinan.
+    if (n.split(' ').length <= 7 && /^ (hola|buenos dias|buenas tardes|buenas noches|buenas|que tal|como estas|como esta|gracias|muchas gracias|ok gracias|listo gracias|chao|adios|hasta luego|nos vemos|hola buenos dias|hola buenas|hola que tal)( \w+){0,2} $/.test(n)) return 'saludo';
+    if (/\b(que (puedes|sabes|podrias|puedo) (hacer|preguntar\w*|pedir\w*|consultar)|en que (me )?(puedes |podrias )?ayud\w*|necesito ayuda|como funciona\w*|que haces|para que sirves|que cosas (puedes|haces|sabes)|instrucciones|que (me )?ofreces)\b/.test(n)
+      || /^ (ayuda|ayudame) $/.test(n)
+      || /^ (me )?(puedes|sabes|podrias) (buscar|consultar|ver|revisar|darme|entregar|decir) (los |las )?(datos|informacion|info|precios|stock|cotizaciones|pendientes|clientes|productos)( de (los |las )?(clientes?|productos?))? $/.test(n)) return 'ayuda';
     if (R.record.test(n)) return 'recordatorio';
     if (R.hecha.test(n)) return 'hecha';
     if (R.pend.test(n)) return 'pend';
@@ -138,7 +157,8 @@
   // ------------------------------------------------------------------ cartera de clientes
   var SUF = ' ltda limitada spa sa s.a eirl e.i.r.l sociedad soc cia y e hijos el la los las de del al en con por para un una ';
   // Palabras de la orden que no son parte de un nombre de cliente ("tengo" casi calzaba con "Rengo").
-  var STOP_Q = ' tengo tienes tiene tenemos que cuando como donde quien cual hora dia llamar llamarlo llamarla llamarle llamo llame llama hablar visitar visite enviar mandar precio precios stock telefono fono correo direccion cotizacion cotizaciones recuerdame recordatorio tarea nota anota manana hoy pasado semana mes para por con del las los una uno dos tres cuatro cinco seis siete ocho nueve diez cliente empresa datos ficha contacto marca marcar hecha hecho lista mejor sobre ';
+  var STOP_Q = ' tengo tienes tiene tenemos que cuando como donde quien cual hora dia llamar llamarlo llamarla llamarle llamo llame llama hablar visitar visite enviar mandar precio precios stock telefono fono correo direccion cotizacion cotizaciones recuerdame recordatorio tarea nota anota manana hoy pasado semana mes para por con del las los una uno dos tres cuatro cinco seis siete ocho nueve diez cliente empresa datos ficha contacto marca marcar hecha hecho lista mejor sobre '
+    + 'ese esa eso esto este esta estos estas aquel aquella puedes podrias quiero necesito quisiera guardar guardame agregar agregame crear creame registrar poner ponme favor recordar recordarme avisame hola gracias buenas buenos dias tardes noches busca buscar buscame dame dime muestrame aviso alarma pendiente pendientes ';
   function tokensCli(n) { return M.norm(n).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 2 && SUF.indexOf(' ' + w + ' ') < 0; }); }
   function parecido(a, b) {
     if (a === b) return true;
@@ -164,10 +184,12 @@
     var n0 = ws.length; for (var i = 0; i < n0 - 1; i++) { ws.push(ws[i] + ws[i + 1]); if (i < n0 - 2) ws.push(ws[i] + ws[i + 1] + ws[i + 2]); }
     this.lista.forEach(function (c) {
       if (!c._t || !c._t.length) return;
-      var sc = 0, tot = 0, hit = 0;
-      c._t.forEach(function (w) { var f = idf[w] || 1; tot += f; if (ws.some(function (x) { return parecido(x, w); })) { sc += f; hit++; } });
+      var sc = 0, tot = 0, hit = 0, maxL = 0;
+      c._t.forEach(function (w) { var f = idf[w] || 1; tot += f; if (ws.some(function (x) { return parecido(x, w); })) { sc += f; hit++; if (w.length > maxL) maxL = w.length; } });
       if (!hit) return;
       var cob = sc / tot;
+      // Una sola palabra corta o que es solo parte del nombre no reconoce a un cliente ("ese" no es ESE SPA).
+      if (!laxo && hit === 1 && cob < 1 && (maxL < 5 || cob < .5)) return;
       if (laxo || sc >= 2.2 || cob >= .6) { c._cob = cob; out.push({ c: c, sc: sc + cob * 3 }); }
     });
     out.sort(function (a, b) { return b.sc - a.sc; });
@@ -254,7 +276,11 @@
        { tipo:'ficha', para:'contacto'|'cotiz'|'llamar', cli, resultado } | { tipo:'elegir', clis, para }
        { tipo:'hecha', cli } | { tipo:'borrador', borrador } | { tipo:'ia', motivo }  */
   M.interpretar = function (texto, ctx) {
+    var tipo0 = M.intencion(texto);                                  // saludo y "que puedes hacer" se miran antes de limpiar
+    if (tipo0 === 'saludo' || tipo0 === 'ayuda') return { tipo: tipo0 };
+    texto = M.limpiarOrden(texto);
     var datos = ctx.datos, cartera = ctx.cartera, tipo = M.intencion(texto), n = ' ' + M.norm(texto) + ' ';
+    if (tipo === 'saludo' || tipo === 'ayuda') return { tipo: tipo };
     var clis = cartera.buscar(texto), cli = clis[0] || null;
     var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
     if (tipo === 'pend') return { tipo: 'pend' };
@@ -283,9 +309,11 @@
     var f = M.leerFecha(texto), cot = M.cotizacionDe(texto), cli = clis[0] || null;
     if (tipo === 'prosp' && cli && (cli._cob || 0) < .6) cli = null;   // una prospeccion suele ser alguien que aun no es cliente
     var titulo = M.tituloDe(texto, f);
-    if (tipo === 'visita') titulo = 'Registrar visita' + (cli ? ' a ' + cli.n : '');
-    if (tipo === 'prosp') titulo = 'Prospección' + (cli ? ': ' + cli.n : '');
-    return { tipo: tipo, titulo: titulo, detalle: texto, fecha: f.iso || M.iso(M.hoy0()), hora: f.hora || (tipo === 'recordatorio' ? '09:00' : ''), clis: clis, cli: cli ? cli.r : '', cot: cot };
+    // "puedes guardar un recordatorio" sin decir de que: falta el "que" (se pregunta).
+    var sinQue = !titulo.replace(/^(un |una |el |la |otro |otra )?(recordatorio|aviso|alarma|tarea|nota|pendiente|algo|una cosa)s?\.?$/i, '').trim();
+    if (tipo === 'visita') { titulo = 'Registrar visita' + (cli ? ' a ' + cli.n : ''); sinQue = false; }
+    if (tipo === 'prosp') { titulo = 'Prospección' + (cli ? ': ' + cli.n : ''); sinQue = false; }
+    return { tipo: tipo, titulo: titulo, detalle: texto, fecha: f.iso || M.iso(M.hoy0()), hora: f.hora || (tipo === 'recordatorio' ? '09:00' : ''), clis: clis, cli: cli ? cli.r : '', cot: cot, sinQue: sinQue, fechaDicha: !!(f.iso || f.hora) };
   };
   M.fraseBorrador = function (b, cartera) {
     var lo = { recordatorio: 'el recordatorio', tarea: 'la tarea', visita: 'la visita', prosp: 'la prospección', nota: 'la nota' }[b.tipo], c = cartera && cartera.porRut[b.cli];
@@ -302,6 +330,7 @@
   // +1 si, -1 no, 0 no queda claro. Gana lo que se dijo primero ("si, no hay problema" es un si).
   M.siNo = function (texto) {
     var n = ' ' + M.norm(texto) + ' ';
+    if (/\bno (lo )?se\b/.test(n)) return 0;                                 // "no se" no es un no
     if (/\bno (me |te |se )?olvid/.test(n)) return 1;
     if (/\bno (lo |la |le )?(guard|anot|registr|agend|grab)\w*/.test(n)) return -1;
     if (/\bno hay problema\b/.test(n)) return 1;

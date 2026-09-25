@@ -73,6 +73,9 @@
     });
   };
   C.prototype._atender = function (texto) {
+    var tipo0 = M.intencion(texto);
+    if (!this.pregunta && (tipo0 === 'saludo' || tipo0 === 'ayuda')) return this._atenderTipo(tipo0, ' ' + M.norm(texto) + ' ');
+    texto = M.limpiarOrden(texto);
     var n = ' ' + M.norm(texto) + ' ', p = this.pregunta, s;
     // 1) Respuesta a lo que se pregunto
     if (p) {
@@ -81,25 +84,37 @@
         var f = M.leerFecha(texto);
         if (f.iso || f.hora) { if (f.iso) p.borrador.fecha = f.iso; if (f.hora) p.borrador.hora = f.hora; return this.confirmar(p.borrador); }
         if (M.siNo(texto) < 0) return 'Bien, no lo guardo.';
+      } else if (p.tipo === 'que') {
+        // Se pregunto "que te recuerdo": la respuesta trae el que, y a veces la fecha y el cliente.
+        var fq = M.leerFecha(texto), tq = M.tituloDe(texto, fq), cq = this.cartera.buscar(texto), bq = p.borrador;
+        if (tq && M.intencion(texto) !== 'saludo') {
+          bq.titulo = tq; bq.detalle = texto; if (fq.iso) bq.fecha = fq.iso; if (fq.hora) bq.hora = fq.hora;
+          if (cq.length && !bq.cli) { bq.clis = cq; bq.cli = cq[0].r; }
+          if (bq.tipo === 'recordatorio' && !fq.iso && !fq.hora && !p.fechaDicha) { this.pregunta = { tipo: 'cuando', borrador: bq }; return '¿Para cuándo?'; }
+          return this.confirmar(bq);
+        }
+        if (M.siNo(texto) < 0) return 'Bien, lo dejamos.';
       } else if (p.tipo === 'confirmar') {
         // Humberto (25-09-2026): "antes de una accion, confirmar dando el detalle". Aqui llega el si,
-        // el no, o una correccion ("mejor el jueves", "a las 4", "sin cliente", "que diga...").
-        var b0 = p.borrador, cambios = [], f0 = M.leerFecha(texto), n0 = n, it = M.intencion(texto);
-        // Una orden nueva ("que tengo hoy", "precio del r32") no es respuesta: se deja el borrador y se atiende.
-        if (/^(pend|precio|stock|contacto|cotiz|llamar|hecha|visita|prosp|nota)$/.test(it)) { f0 = { iso: '', hora: '' }; n0 = ' '; texto = texto; }
-        else {
-        if (f0.iso && f0.iso !== b0.fecha) { b0.fecha = f0.iso; cambios.push('fecha'); }
-        if (f0.hora && f0.hora !== b0.hora) { b0.hora = f0.hora; cambios.push('hora'); }
-        var mt = n0.match(/ (?:es|sea|que sea|como|cambia\w*(?: a)?|hazlo|dejalo) (?:una? |como )?(recordatorio|tarea|visita|nota|prospeccion) /);
-        if (mt) { var tp = mt[1] === 'prospeccion' ? 'prosp' : mt[1]; if (tp !== b0.tipo) { b0.tipo = tp; if (tp === 'recordatorio' && !b0.hora) b0.hora = '09:00'; cambios.push('tipo'); } }
-        if (/ (sin cliente|ningun cliente) /.test(n0) && b0.cli) { b0.cli = ''; cambios.push('cliente'); }
-        else if (/ (el cliente|cliente es|es para|es de|para el cliente|a nombre de) /.test(n0)) { var cc = this.cartera.buscar(texto)[0]; if (cc) { b0.cli = cc.r; cambios.push('cliente'); } }
-        var mq = texto.match(/\b(?:que diga|el t[ií]tulo es|mejor que diga)\s+(.+)$/i); if (mq) { b0.titulo = M.capital(mq[1]); cambios.push('texto'); }
-        if (cambios.length) return this.confirmar(b0, true);
-        s = M.siNo(texto);
-        if (s > 0) return this.guardar(b0);
-        if (s < 0) return 'Bien, no lo guardo.';
-        if (it === 'nose') { this.pregunta = p; return 'No te entendí. ¿Lo guardo, sí o no?'; }
+        // el no, una correccion ("mejor el jueves", "a las 4", "sin cliente", "que diga..."), o lo
+        // repite completo (se reemplaza el borrador), o pide otra cosa (se atiende).
+        var b0 = p.borrador, cambios = [], f0 = M.leerFecha(texto), it = M.intencion(texto), palabras = n.trim().split(' ').length;
+        var nueva = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda)$/.test(it) || (/^(recordatorio|tarea|nota|visita|prosp)$/.test(it) && palabras >= 3 && M.tituloDe(texto, f0).length > 3);
+        if (!nueva) {
+          if (f0.iso && f0.iso !== b0.fecha) { b0.fecha = f0.iso; cambios.push('fecha'); }
+          if (f0.hora && f0.hora !== b0.hora) { b0.hora = f0.hora; cambios.push('hora'); }
+          var mt = n.match(/ (?:es|sea|que sea|como|cambia\w*(?: a)?|hazlo|dejalo) (?:una? |como )?(recordatorio|tarea|visita|nota|prospeccion) /);
+          if (mt) { var tp = mt[1] === 'prospeccion' ? 'prosp' : mt[1]; if (tp !== b0.tipo) { b0.tipo = tp; if (tp === 'recordatorio' && !b0.hora) b0.hora = '09:00'; cambios.push('tipo'); } }
+          if (/ (sin cliente|ningun cliente) /.test(n) && b0.cli) { b0.cli = ''; cambios.push('cliente'); }
+          else if (/ (el cliente|cliente es|es para|es de|para el cliente|a nombre de) /.test(n)) { var cc = this.cartera.buscar(texto)[0]; if (cc) { b0.cli = cc.r; cambios.push('cliente'); } }
+          var mq = texto.match(/\b(?:que diga|el t[ií]tulo es|mejor que diga)\s+(.+)$/i); if (mq) { b0.titulo = M.capital(mq[1]); cambios.push('texto'); }
+          if (cambios.length) return this.confirmar(b0, true);
+          s = M.siNo(texto);
+          if (s > 0) return this.guardar(b0);
+          if (s < 0) return 'Bien, no lo guardo.';
+          if ((p.intentos || 0) >= 1) return 'Lo dejo sin guardar. ¿Qué necesitas?';
+          p.intentos = 1; this.pregunta = p;
+          return 'No te entendí. ' + (b0.tipo === 'recordatorio' ? 'Te recuerdo ' + b0.titulo.charAt(0).toLowerCase() + b0.titulo.slice(1) + ' ' + M.fechaTxt(b0.fecha) + (b0.hora ? ' a las ' + b0.hora : '') : 'Guardo: ' + b0.titulo) + '. ¿Sí o no?';
         }
       } else if (p.tipo === 'cual') {
         var c = this.elegirDe(texto, p.clis);
@@ -123,6 +138,7 @@
     // 4) "cuando tengo que...", "a que hora": se contesta con los pendientes
     if (/\b(cuando|a que hora|que dia|para cuando|para que dia)\b/.test(n) && !M.R.record.test(n) && !/\b(anota|apunta|agenda)/.test(n)) return this.cuando(t2);
     var r = M.interpretar(t2, { datos: this.datos, cartera: this.cartera });
+    if (r.tipo === 'saludo' || r.tipo === 'ayuda') return this._atenderTipo(r.tipo, n);
     if (r.tipo === 'pend') return this.decirPendientes();
     if (r.tipo === 'precio' || r.tipo === 'stock') {
       if (r.resultado) return this.decirProductos(r.tipo, r.resultado);
@@ -139,12 +155,24 @@
     }
     if (r.tipo === 'borrador') {
       var b = r.borrador, dicho = M.leerFecha(texto);
+      // Falta el que ("puedes guardar un recordatorio"): se pregunta, no se adivina.
+      if (b.sinQue) { this.pregunta = { tipo: 'que', borrador: b, fechaDicha: b.fechaDicha }; return b.tipo === 'recordatorio' ? (b.fechaDicha ? '¿Qué te recuerdo?' : '¿Qué te recuerdo, y para cuándo?') : b.tipo === 'nota' ? '¿Qué anoto?' : '¿Qué hay que hacer?'; }
       if (!b.cli && b.clis.length > 1) { this.pregunta = { tipo: 'cual', clis: b.clis, para: 'borrador', borrador: b }; return '¿Con qué cliente? ' + this.listaNombres(b.clis); }
       if (b.tipo === 'recordatorio' && !dicho.iso && !dicho.hora) { this.pregunta = { tipo: 'cuando', borrador: b }; return '¿Para cuándo?'; }
       return this.confirmar(b);
     }
     if (this.ia && this.enLinea() && this.clave()) return this.preguntarIA(texto);
-    return 'No te entendí. Puedo buscar precios, stock, datos de un cliente o tus pendientes, y guardar recordatorios y tareas.';
+    return { dicho: 'No te entendí. Pregúntame por el precio o el stock de un producto, los datos de un cliente o tus pendientes, o dime "recuérdame" y qué. ¿Qué necesitas?', seguir: true };
+  };
+  C.prototype._atenderTipo = function (tipo, n) {
+    if (tipo === 'saludo') return this.saludo(n);
+    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección y las cotizaciones abiertas de un cliente; tus pendientes de hoy; y guardar recordatorios, tareas y notas, o marcar tareas hechas. Por ejemplo: precio del R410A para Clima Norte; teléfono de Refritec; qué tengo hoy; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
+  };
+  C.prototype.saludo = function (n) {
+    if (/gracias/.test(n)) return 'De nada. Aquí estoy.';
+    if (/chao|adios|hasta luego|nos vemos/.test(n)) return 'Chao, que te vaya bien.';
+    var nom = String(this.nombre || '').split(' ')[0];
+    return { dicho: 'Hola' + (nom ? ', ' + nom : '') + '. ¿Qué necesitas? Puedo darte precios, stock, datos de un cliente, tus pendientes, o guardar un recordatorio.', seguir: true };
   };
   C.prototype.listaNombres = function (clis) { var ns = clis.slice(0, 4).map(function (c) { return c.n; }); return ns.length > 1 ? ns.slice(0, -1).join(', ') + ' o ' + ns[ns.length - 1] : ns[0]; };
   // "el primero", "Frio Sur": cual de los candidatos
