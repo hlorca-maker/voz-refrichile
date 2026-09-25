@@ -4,7 +4,7 @@
    El reconocimiento de voz es el del propio Chrome del telefono. */
 'use strict';
 
-var API = 'https://script.google.com/macros/s/AKfycbzVb04pQ1_QjrVcKzHMB5hSeyukZ62_7gMxrXmhZXVfhS6ldZ5COgVM1SiaMtaUBHzZ/exec';
+var API = 'https://script.google.com/macros/s/AKfycbw4Ax55jS8OKCvICEFsbYSiOWvlbgcuboILiwc4VYq92y_IcrgbMBnAK1LEUKvaVa_Omg/exec';
 var LS = { t: 'voz_t', cli: 'voz_cli', hist: 'voz_hist', cola: 'voz_cola', conf: 'voz_conf' };
 
 // ------------------------------------------------------------------ utilidades
