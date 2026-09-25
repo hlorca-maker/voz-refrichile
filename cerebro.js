@@ -118,7 +118,7 @@
         }
       } else if (p.tipo === 'cual') {
         var c = this.elegirDe(texto, p.clis);
-        if (c) { if (p.para === 'borrador') { p.borrador.cli = c.r; return this.confirmar(p.borrador); } return p.para === 'cuando' ? this.cuando(texto, c) : this.conCliente(p.para, c); }
+        if (c) { if (p.para === 'borrador') { p.borrador.cli = c.r; return this.confirmar(p.borrador); } if (p.para === 'cotizado') { this.ult.cli = c; return M.cotizadoTxt(c.n, this.datos.cotizado(c.r)); } return p.para === 'cuando' ? this.cuando(texto, c) : this.conCliente(p.para, c); }
         if (M.siNo(texto) < 0) return 'Bien.';
       } else if (p.tipo === 'hecha') {
         s = M.siNo(texto);
@@ -140,6 +140,12 @@
     var r = M.interpretar(t2, { datos: this.datos, cartera: this.cartera });
     if (r.tipo === 'saludo' || r.tipo === 'ayuda') return this._atenderTipo(r.tipo, n);
     if (r.tipo === 'pend') return this.decirPendientes();
+    if (r.tipo === 'ventas' || r.tipo === 'meta') return this.decirVentas(r.tipo);
+    if (r.tipo === 'cotizado') {
+      if (r.cli) this.ult.cli = r.cli;
+      if (!r.resultado) return 'Todavía no tengo las cotizaciones en el teléfono; dame unos segundos.';
+      return M.cotizadoTxt(r.cli ? r.cli.n : (r.folio ? 'La cotización ' + r.folio : ''), r.resultado);
+    }
     if (r.tipo === 'precio' || r.tipo === 'stock') {
       if (r.resultado) return this.decirProductos(r.tipo, r.resultado);
       if (this.datos.t && this.ia && this.enLinea() && this.clave()) return this.preguntarIA(texto);
@@ -166,7 +172,18 @@
   };
   C.prototype._atenderTipo = function (tipo, n) {
     if (tipo === 'saludo') return this.saludo(n);
-    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección y las cotizaciones abiertas de un cliente; tus pendientes de hoy; y guardar recordatorios, tareas y notas, o marcar tareas hechas. Por ejemplo: precio del R410A para Clima Norte; teléfono de Refritec; qué tengo hoy; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
+    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección y lo cotizado a un cliente; tus ventas del mes, tu meta y cuánto te falta; tus pendientes; y guardar recordatorios, tareas y notas, o marcar tareas hechas. Por ejemplo: precio del R410A para Clima Norte; qué le cotizamos a Refritec; cómo voy con la meta; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
+  };
+  // Ventas y meta: vienen con la copia (accion "ventas"); si aun no estan, se piden ahora.
+  C.prototype.decirVentas = function (tipo) {
+    var self = this;
+    if (this.datos.ventas) return M.ventasTxt(this.datos.ventas, tipo);
+    if (!this.enLinea() || !this.clave()) return 'Todavía no tengo tus ventas y no hay señal para traerlas.';
+    return this.api.llamar('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) {
+      if (!v.ok) return v.error || 'No pude traer las ventas.';
+      self.datos.usarVentas(v); if (self.alVentas) self.alVentas(v);
+      return M.ventasTxt(v, tipo);
+    }, function (e) { return e.red ? 'Sin señal para traer las ventas.' : 'No me llegaron las ventas; pregúntame de nuevo en unos segundos.'; });
   };
   C.prototype.saludo = function (n) {
     if (/gracias/.test(n)) return 'De nada. Aquí estoy.';

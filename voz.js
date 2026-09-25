@@ -89,12 +89,20 @@
 
   // ---------------------------------------------------------------- datos en el telefono
   var pidiendo = false;
-  function cargarGuardados() { var d = alm.get('datos', null); if (d && d.o) cerebro.usarDatos(d.o, d.t); pie(); }
+  function cargarGuardados() {
+    var d = alm.get('datos', null); if (d && d.o) cerebro.usarDatos(d.o, d.t);
+    var v = alm.get('ventas', null); if (v && v.v && Date.now() - v.t < 3 * 3600000) datos.usarVentas(v.v, v.t);
+    pie();
+  }
+  cerebro.alVentas = function (v) { alm.set('ventas', { t: Date.now(), v: v }); };
+  function pedirVentas() {
+    api.llamar('ventas', {}, { fondo: true, plazo: 150000, releer: 2 }).then(function (v) { if (v.ok) { datos.usarVentas(v); alm.set('ventas', { t: Date.now(), v: v }); } }).catch(function () {});
+  }
   function pedirDatos(forzar) {
     if (pidiendo || navigator.onLine === false || !alm.get('t', '')) return;
     if (!forzar && Date.now() - datos.t < 20 * 60000) return;
     pidiendo = true;
-    api.llamar('datos', {}, { fondo: true, plazo: 150000, releer: 3 }).then(function (o) { pidiendo = false; if (o.ok) { cerebro.usarDatos(o); alm.set('datos', { t: Date.now(), o: o }); } pie(); }, function () { pidiendo = false; pie(); });
+    api.llamar('datos', {}, { fondo: true, plazo: 150000, releer: 3 }).then(function (o) { pidiendo = false; if (o.ok) { cerebro.usarDatos(o); alm.set('datos', { t: Date.now(), o: o }); pedirVentas(); } pie(); }, function () { pidiendo = false; pie(); });
   }
 
   // ---------------------------------------------------------------- arranque

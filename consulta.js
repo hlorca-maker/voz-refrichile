@@ -106,12 +106,14 @@
       var hechas = cola.hechasPendientes(), prov = PEND.filter(function (x) { return /^prov-/.test(x.id); });
       PEND = datos.tareas.filter(function (x) { return !hechas[x.id]; }).concat(prov); PEND_T = datos.t; pie();
     }
-    function cargarGuardados() { var d = alm.get('datos', null); if (d && d.o) usarDatos(d.o, d.t); }
+    function cargarGuardados() { var d = alm.get('datos', null); if (d && d.o) usarDatos(d.o, d.t); var v = alm.get('ventas', null); if (v && v.v && Date.now() - v.t < 3 * 3600000) datos.usarVentas(v.v, v.t); }
     function pedirDatos(forzar) {
       if (pidiendo || navigator.onLine === false || !clave()) return;
       if (!forzar && Date.now() - datos.t < 20 * 60000) return;
       pidiendo = true; pie();
-      api.llamar('datos', {}, { fondo: true, plazo: 150000, releer: 3 }).then(function (o) { pidiendo = false; if (o.ok) { usarDatos(o); alm.set('datos', { t: Date.now(), o: o }); } pie(); }, function () { pidiendo = false; pie(); });
+      api.llamar('datos', {}, { fondo: true, plazo: 150000, releer: 3 }).then(function (o) {
+        pidiendo = false; if (o.ok) { usarDatos(o); alm.set('datos', { t: Date.now(), o: o }); api.llamar('ventas', {}, { fondo: true, plazo: 150000, releer: 2 }).then(function (v) { if (v.ok) { datos.usarVentas(v); alm.set('ventas', { t: Date.now(), v: v }); } }).catch(function () {}); } pie();
+      }, function () { pidiendo = false; pie(); });
     }
     function cargarPend(cb) {
       api.llamar('pendientes', {}, { fondo: !cb }).then(function (o) {
@@ -141,6 +143,18 @@
       if (tipo === 'precio') decir(a.desc + ': ' + (a.precio ? Math.round(a.precio) + ' pesos más IVA, ' : 'sin precio de lista, ') + (o.cliente ? 'para ' + o.cliente : 'en ' + o.listaNom) + '. Stock ' + (a.stock || 0) + '.');
       else { var con = [], sin = []; top.forEach(function (x, i) { (x.stock > 0 ? con : sin).push({ x: x, d: i === 0 ? x.desc : dd[i] }); });
         decir(con.length ? con.map(function (p) { return p.d + ': ' + p.x.stock + ' unidades'; }).join('. ') + '.' + (sin.length ? ' Sin stock: ' + sin.map(function (p) { return p.d; }).join(', ') + '.' : '') : a.desc + ': sin stock.'); }
+    }
+    function cardVentas(tipo) {
+      function pintarV(v) {
+        var f = function (t, val) { return '<div class="vc-fila"><div class="s">' + t + '</div><div class="v">' + val + '</div></div>'; };
+        var h = f('Vendido este mes', pesos(v.mes) + (v.docs ? '<small>' + v.docs + ' documentos</small>' : '')) + (v.meta ? f('Meta del mes', pesos(v.meta)) + f('Falta', pesos(v.falta) + '<small>' + (v.avance || 0) + '% de avance</small>') : f('Meta', '<small>sin meta cargada</small>')) + f('Vendido en el año', pesos(v.anio));
+        if (v.equipo && v.vendedores) h += '<div class="vc-h" style="margin-top:8px">Por vendedor</div>' + v.vendedores.map(function (x) { return f(esc(x.nombre), pesos(x.mes) + (x.meta ? '<small>' + (x.avance || 0) + '% de ' + pesos(x.meta) + '</small>' : '')); }).join('');
+        pintar(card(v.equipo ? 'Ventas del equipo' : 'Mis ventas', h + '<div class="vc-nota">' + esc(v.periodo || '') + (v.hora ? ' · datos de las ' + esc(String(v.hora).slice(11)) : '') + '</div>', ''));
+        decir(M.ventasTxt(v, tipo));
+      }
+      if (datos.ventas) return pintarV(datos.ventas);
+      pintar(card('Ventas', '<div class="vc-nota">Trayendo tus ventas…</div>'));
+      api.llamar('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) return aviso(v.error || 'No se pudo.', true); datos.usarVentas(v); alm.set('ventas', { t: Date.now(), v: v }); pintarV(v); }).catch(function (e) { aviso(M.errTxt(e), true); });
     }
     function cardNoProd(q) { pintar(card('Producto', '<div class="vc-nota">No encontré “' + esc(q) + '”. Prueba con otras palabras o el código.</div>')); decir('No encontré ese producto'); }
     function cardFicha(o, para) {
@@ -281,6 +295,15 @@
       var r = M.interpretar(texto, { datos: datos, cartera: cartera });
       if (r.tipo === 'saludo' || r.tipo === 'ayuda') { var m0 = r.tipo === 'saludo' ? 'Hola. ¿Qué necesitas? Precios, stock, datos de un cliente, tus pendientes o un recordatorio.' : 'Puedo decirte precio y stock de un producto; teléfono, dirección y cotizaciones abiertas de un cliente; tus pendientes; y guardar recordatorios, tareas y notas. Por ejemplo: “precio del R410A para Clima Norte”, “teléfono de Refritec”, “recuérdame llamar a Frío Sur mañana a las 10”.'; pintar(card(r.tipo === 'saludo' ? 'Hola' : 'Qué puedo hacer', '<div class="vc-nota">' + esc(m0) + '</div>')); decir(m0); return; }
       if (r.tipo === 'pend') return cardPend(true);
+      if (r.tipo === 'ventas' || r.tipo === 'meta') return cardVentas(r.tipo);
+      if (r.tipo === 'cotizado') {
+        if (!r.resultado) return aviso('Todavía no tengo las cotizaciones en este equipo.', true);
+        var nomC = r.cli ? r.cli.n : (r.folio ? 'Cotización ' + r.folio : '');
+        pintar(card('Cotizado', '<div class="vc-nom">' + esc(nomC) + '</div>' + (r.resultado.length ? r.resultado.slice(0, 4).map(function (c) {
+          return '<div class="vc-h" style="margin-top:8px">N° ' + esc(c.folio) + ' · ' + esc(c.fecha) + ' · ' + c.dias + ' d · ' + pesos(c.monto) + '</div>' + c.lineas.slice(0, 8).map(function (l) { return '<div class="vc-fila"><div><div class="n">' + esc(l.desc) + '</div><div class="s">' + esc(l.cod) + (l.cant ? ' · ' + l.cant + ' un.' : '') + '</div></div><div class="v">' + pesos(l.monto) + '</div></div>'; }).join('');
+        }).join('') : '<div class="vc-nota">No tiene cotizaciones abiertas.</div>')));
+        decir(M.cotizadoTxt(nomC, r.resultado)); return;
+      }
       if (r.tipo === 'precio' || r.tipo === 'stock') {
         if (r.resultado) return cardProductos(r.tipo, r.resultado);
         // No esta en la copia: si hay IA, que lo intente ella (quizas no era un producto); si no, se dice.

@@ -48,7 +48,7 @@ function numero(w) { return /^\d+$/.test(w) ? +w : (NUM[w] || null); }
    detras (tarea, hecha: la persona ya oyo "listo"), "f" el segundo plano (la copia de datos,
    el contador). "e" y "f" esperan a que no haya nada de la persona en curso. */
 var API_COLA = [], API_VUELO = { u: 0, e: 0, f: 0 }, API_TOPE = 35000, API_PLAZO = 75000, API_PAUSA = { corta: 800, larga: 15000 };
-var API_RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1 }, API_RID = { chat: 1, tarea: 1, hecha: 1 };
+var API_RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1, ventas: 1 }, API_RID = { chat: 1, tarea: 1, hecha: 1 };
 function ridNuevo() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 function api(accion, datos, opc) {
   opc = opc || {}; datos = Object.assign({}, datos || {});
@@ -270,6 +270,9 @@ var R = {
   llamar: /^ (quiero |necesito |voy a |hay que )?(llama\w*|marca\w*) (a |al |la |el |con )?/,
   contacto: /\b(telefono|fono|celular|numero de (telefono|contacto)|correo|mail|email|direccion|donde queda|ubicacion|contacto de|datos (de|del)|ficha (de|del)|que sabes de|informacion (de|del))\b/,
   cotiz: /\b(cotizaciones?( abiertas| pendientes)? (de|del|a|para)|que (le )?(tengo |he )?cotizad\w*|que le cotice)\b/,
+  cotizado: /\b(que (le |les )?(hemos |he |tengo |tiene |tenemos |les |le )?cotiz(ado|amos|aste|e)\b|productos?( \w+){0,2} cotizad\w*|tiene\w* cotizad\w*|que (hay|va|viene|tiene|trae) (en )?la cotizacion|detalle de (la )?cotizacion|que (le )?cotice|cotizado a|que le (estamos|estoy) cotizando)\b/,
+  ventas: /\b(mis ventas|cuant[oa]s? (se )?(lleva\w*|llevo|hemos|he|va|van|vamos|voy) (vendid\w*|facturad\w*)|cuanto (vendi|vendimos|vendio|facturamos|facture)\b|cuantas ventas|ventas? (de |del )?(hoy|mes|ano|semana)|como voy\b|como vamos\b|vendido (este|del|en el) (mes|ano)|vendido hoy|facturacion del mes|cuanto (llevo|vamos|voy) (en )?(el )?mes|cuanto (he|hemos) vendido|lo vendido|mi facturacion)\b/,
+  meta: /\b(mi meta|cual es (mi|la) meta|meta del mes|cuanto (me |nos )?falta (para|por) (la meta|vender|cumplir|llegar|facturar)|cuanto (me|nos) falta|como (voy|vamos) con la meta|avance de (la )?meta|(estoy|estamos|vamos a) (cumpliendo|llegando|llegar)|voy a llegar|cumpliendo la meta)\b/,
   stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
   precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
   visita: /\b(visite|visitamos|estuve (con|en|donde)|fui (a|donde)|pase (a|por|donde)|me reuni|reunion con)\b/,
@@ -298,6 +301,9 @@ function intencion(t) {
   if (R.record.test(n)) return 'recordatorio';
   if (R.hecha.test(n)) return 'hecha';
   if (R.pend.test(n)) return 'pend';
+  if (R.meta.test(n)) return 'meta';
+  if (R.ventas.test(n)) return 'ventas';
+  if (R.cotizado.test(n)) return 'cotizado';
   // "Llama a Clima Norte" es llamar ahora; con fecha ("llamar a Clima Norte el martes") es una tarea.
   if (R.llamar.test(n) && !leerFecha(t).iso) return 'llamar';
   // "Tengo que enviar la lista de precios" es una tarea, no una consulta de precio.
@@ -360,7 +366,7 @@ function datosUsar(o, t) {
     return { cod: p[0], desc: p[1], act: !!(p[2] & 1), conPrecio: !!(p[2] & 2), stock: p[3] || 0, bod: p[4] || [], pr: p[5] || 0, _t: txt, _c: txt.replace(/[\s\-\/.]/g, ''), _cod: normP(p[0]) };
   });
   DAT.cliMap = {}; (o.cli || []).forEach(function (c) { DAT.cliMap[c[0]] = { r: c[0], n: c[1], l: c[2], f: c[3], m: c[4], d: c[5], c: c[6], b: !!c[7] }; });
-  DAT.cot = o.cot || [];
+  DAT.cot = o.cot || []; DAT.cotLineas = o.cotLineas || [];
   if (o.tareas) { PEND = pendMezclar(o.tareas); PEND_T = DAT.t; pintarBadge(); }
   if (o.cli && o.cli.length) {
     CLI = { lista: o.cli.map(function (c) { return { r: c[0], n: c[1], l: c[2] }; }), t: DAT.t }; lsSet(LS.cli, CLI); prepararClientes();
@@ -368,12 +374,12 @@ function datosUsar(o, t) {
   }
 }
 function datosGuardar(o) { try { localStorage.setItem('voz_datos', JSON.stringify({ t: Date.now(), o: o })); } catch (e) {} }
-function datosCargar() { var d = lsGet('voz_datos', null); if (d && d.o) datosUsar(d.o, d.t); }
+function datosCargar() { var d = lsGet('voz_datos', null); if (d && d.o) datosUsar(d.o, d.t); var v = lsGet('voz_ventas', null); if (v && v.v && Date.now() - v.t < 3 * 3600000) DAT.ventas = v.v; }
 function datosPedir(forzar) {
   if (DAT_PIDIENDO || !navigator.onLine) return;
   if (!forzar && Date.now() - DAT.t < 20 * 60000) return;
   DAT_PIDIENDO = true;
-  api('datos', {}, { fondo: true, plazo: 150000, releer: 3 }).then(function (o) { DAT_PIDIENDO = false; if (o.ok) { datosUsar(o); datosGuardar(o); } }, function () { DAT_PIDIENDO = false; });
+  api('datos', {}, { fondo: true, plazo: 150000, releer: 3 }).then(function (o) { DAT_PIDIENDO = false; if (o.ok) { datosUsar(o); datosGuardar(o); ventasPedir(); } }, function () { DAT_PIDIENDO = false; });
 }
 function horaTxt(t) { var d = new Date(t); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
 
@@ -455,6 +461,15 @@ function rapido(texto) {
   var clis = buscarClientes(texto), cli = clis[0] || null;
   var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
   if (tipo === 'pend') { $('vivo').textContent = texto; verPendientes(true); return true; }
+  if (tipo === 'ventas' || tipo === 'meta') { $('vivo').textContent = texto; verVentas(tipo); return true; }
+  if (tipo === 'cotizado') {
+    var folioC = cotizacionDe(texto);
+    if (!cli && !folioC) { clis = buscarClientes(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
+    if (!cli && !folioC) return false;
+    $('vivo').textContent = texto;
+    if (cli && !claro && !folioC) { elegirCliente(clis, 'cotizado'); return true; }
+    verCotizado(cli, folioC); return true;
+  }
   if (tipo === 'precio' || tipo === 'stock') {
     if (cli && !claro && nombrado) return false;                       // "para Frío..." y hay varios: que pregunte la IA
     var q = productoDe(texto, tipo === 'precio' && claro ? cli : null); if (!q) return false;
@@ -481,7 +496,46 @@ function elegirCliente(clis, tipo) {
   }).join('') + '</div></div>');
   estado('¿Cuál de estos?'); decir('¿Cuál de estos? ' + clis.slice(0, 3).map(function (c) { return c.n; }).join(', '));
 }
-function verFicha(rut, tipo) { var f = fichaLocal(rut); if (f) { pintarFicha(f, tipo); estado('Toca y habla'); } else if (CLI_POR_RUT[rut]) fichaCliente(CLI_POR_RUT[rut], tipo, ''); }
+function verFicha(rut, tipo) { if (tipo === 'cotizado') return verCotizado(CLI_POR_RUT[rut], ''); var f = fichaLocal(rut); if (f) { pintarFicha(f, tipo); estado('Toca y habla'); } else if (CLI_POR_RUT[rut]) fichaCliente(CLI_POR_RUT[rut], tipo, ''); }
+/* Productos cotizados, ventas y meta (25-09-2026, Humberto: "saber sobre productos cotizados a algun cliente,
+   mis ventas, mi meta, cuanto me falta por vender"). Las lineas vienen con la copia; las ventas con la accion
+   "ventas" (se piden despues de la copia y quedan en voz_ventas). Los textos hablados son los mismos del motor. */
+function plataTxt(n) { n = Math.round(n || 0); var s = n < 0 ? 'menos ' : '', a = Math.abs(n); if (a >= 1e6) { var m = Math.round(a / 1e5) / 10; return s + String(m).replace('.', ',') + (m === 1 ? ' millón' : ' millones'); } if (a >= 1e3) return s + Math.round(a / 1e3) + ' mil'; return s + a + ' pesos'; }
+function cotizadoLocal(rut, folio) {
+  var porK = {};
+  (DAT.cotLineas || []).forEach(function (l) { if ((rut && l[0] !== rut) || (folio && l[1] !== String(folio))) return; (porK[l[0] + '|' + l[1]] = porK[l[0] + '|' + l[1]] || []).push({ cod: l[2], desc: l[3], cant: l[4], monto: l[5] }); });
+  return DAT.cot.filter(function (c) { return (!rut || c[0] === rut) && (!folio || c[1] === String(folio)); }).sort(function (a, b) { return a[3] - b[3]; })
+    .map(function (c) { return { folio: c[1], fecha: c[2], dias: c[3], monto: c[4], lineas: (porK[c[0] + '|' + c[1]] || []).sort(function (a, b) { return b.monto - a.monto; }) }; });
+}
+function verCotizado(cli, folio) {
+  var cots = cotizadoLocal(cli ? cli.r : '', folio), nom = cli ? cli.n : (folio ? 'Cotización ' + folio : '');
+  pintar('<div class="card"><h3>Cotizado</h3><div style="font-weight:700;font-size:17px;margin-bottom:6px">' + esc(nom) + '</div>' + (cots.length ? cots.slice(0, 4).map(function (c) {
+    return '<div style="margin-top:10px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--hint)">N° ' + esc(c.folio) + ' · ' + esc(c.fecha) + ' · ' + c.dias + ' d · ' + pesos(c.monto) + '</div>' + c.lineas.slice(0, 8).map(function (l) { return '<div class="fila"><div><div class="n">' + esc(l.desc) + '</div><div class="s">' + esc(l.cod) + (l.cant ? ' · ' + l.cant + ' un.' : '') + '</div></div><div class="v">' + pesos(l.monto) + '</div></div>'; }).join('');
+  }).join('') : '<div class="nota">No tiene cotizaciones abiertas.</div>') + '</div>');
+  estado('Toca y habla');
+  var frases = cots.slice(0, 2).map(function (c) { var ls = c.lineas.slice(0, 4).map(function (l) { return l.desc.toLowerCase() + (l.cant ? ', ' + l.cant + (l.cant === 1 ? ' unidad' : ' unidades') : ''); }); return 'La ' + c.folio + ', de hace ' + c.dias + ' días por ' + plataTxt(c.monto) + (ls.length ? ': ' + ls.join('; ') : '') + '.'; });
+  decir(cots.length ? nom + ' tiene ' + cots.length + (cots.length === 1 ? ' cotización abierta. ' : ' cotizaciones abiertas. ') + frases.join(' ') : nom + ' no tiene cotizaciones abiertas.');
+  histAgregar('Cotizado: ' + nom);
+}
+function ventasTxt(v, tipo) {
+  var d = new Date(), quedan = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate();
+  var lleva = (v.equipo ? 'El equipo lleva ' : 'Este mes llevas ') + plataTxt(v.mes) + (v.docs ? ' en ' + v.docs + ' documentos' : '') + '.';
+  var meta = v.meta ? ((v.equipo ? 'La meta del equipo es ' : 'Tu meta es ') + plataTxt(v.meta) + ': ' + (v.falta > 0 ? 'faltan ' + plataTxt(v.falta) + ' (' + v.avance + ' por ciento)' + (quedan ? ', con ' + quedan + ' días por delante' : '') : 'ya está cumplida') + '.') : 'No hay meta cargada este mes.';
+  return (tipo === 'meta' ? meta + ' ' + lleva : lleva + ' ' + meta) + ' En el año, ' + plataTxt(v.anio) + '.';
+}
+function pintarVentas(v, tipo) {
+  var f = function (t, val) { return '<div class="fila"><div class="s">' + t + '</div><div class="v">' + val + '</div></div>'; };
+  var h = f('Vendido este mes', pesos(v.mes) + (v.docs ? '<small>' + v.docs + ' documentos</small>' : '')) + (v.meta ? f('Meta del mes', pesos(v.meta)) + f('Falta', pesos(v.falta) + '<small>' + (v.avance || 0) + '% de avance</small>') : f('Meta', '<small>sin meta cargada</small>')) + f('Vendido en el año', pesos(v.anio));
+  if (v.equipo && v.vendedores) h += '<div style="margin-top:10px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--hint)">Por vendedor</div>' + v.vendedores.map(function (x) { return f(esc(x.nombre), pesos(x.mes) + (x.meta ? '<small>' + (x.avance || 0) + '% de ' + pesos(x.meta) + '</small>' : '')); }).join('');
+  pintar('<div class="card"><h3>' + (v.equipo ? 'Ventas del equipo' : 'Mis ventas') + ' <span class="tag">' + esc(v.periodo || '') + '</span></h3>' + h + (v.hora ? '<div class="nota">Datos de las ' + esc(String(v.hora).slice(11)) + '</div>' : '') + '</div>');
+  estado('Toca y habla'); decir(ventasTxt(v, tipo)); histAgregar('Ventas del mes');
+}
+function verVentas(tipo) {
+  if (DAT.ventas) return pintarVentas(DAT.ventas, tipo);
+  estado('Trayendo tus ventas…');
+  api('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) { estado(v.error || 'No se pudo.', 'err'); return; } DAT.ventas = v; lsSet('voz_ventas', { t: Date.now(), v: v }); pintarVentas(v, tipo); }).catch(function (e) { estado(errTxt(e), 'err'); });
+}
+function ventasPedir() { api('ventas', {}, { fondo: true, plazo: 150000, releer: 2 }).then(function (v) { if (v.ok) { DAT.ventas = v; lsSet('voz_ventas', { t: Date.now(), v: v }); } }).catch(function () {}); }
 function procesarLocal(texto) {
   $('vivo').textContent = texto;
   var tipo = intencion(texto), clis = buscarClientes(texto), cli = clis[0] || null;

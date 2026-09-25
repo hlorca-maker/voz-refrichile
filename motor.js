@@ -87,6 +87,10 @@
     llamar: /^ (quiero |necesito |voy a |hay que )?(llama\w*|marca\w*) (a |al |la |el |con )?/,
     contacto: /\b(telefono|fono|celular|numero de (telefono|contacto)|correo|mail|email|direccion|donde queda|ubicacion|contacto de|datos (de|del)|ficha (de|del)|que sabes de|informacion (de|del))\b/,
     cotiz: /\b(cotizaciones?( abiertas| pendientes)? (de|del|a|para)|que (le )?(tengo |he )?cotizad\w*|que le cotice)\b/,
+    // 25-09-2026 (Humberto): productos cotizados a un cliente, mis ventas, mi meta y cuanto me falta
+    cotizado: /\b(que (le |les )?(hemos |he |tengo |tiene |tenemos |les |le )?cotiz(ado|amos|aste|e)\b|productos?( \w+){0,2} cotizad\w*|tiene\w* cotizad\w*|que (hay|va|viene|tiene|trae) (en )?la cotizacion|detalle de (la )?cotizacion|que (le )?cotice|cotizado a|que le (estamos|estoy) cotizando)\b/,
+    ventas: /\b(mis ventas|cuant[oa]s? (se )?(lleva\w*|llevo|hemos|he|va|van|vamos|voy) (vendid\w*|facturad\w*)|cuanto (vendi|vendimos|vendio|facturamos|facture)\b|cuantas ventas|ventas? (de |del )?(hoy|mes|ano|semana)|como voy\b|como vamos\b|vendido (este|del|en el) (mes|ano)|vendido hoy|facturacion del mes|cuanto (llevo|vamos|voy) (en )?(el )?mes|cuanto (he|hemos) vendido|lo vendido|mi facturacion)\b/,
+    meta: /\b(mi meta|cual es (mi|la) meta|meta del mes|cuanto (me |nos )?falta (para|por) (la meta|vender|cumplir|llegar|facturar)|cuanto (me|nos) falta|como (voy|vamos) con la meta|avance de (la )?meta|(estoy|estamos|vamos a) (cumpliendo|llegando|llegar)|voy a llegar|cumpliendo la meta)\b/,
     stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
     precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
     visita: /\b(visite|visitamos|estuve (con|en|donde)|fui (a|donde)|pase (a|por|donde)|me reuni|reunion con)\b/,
@@ -117,6 +121,9 @@
     if (R.record.test(n)) return 'recordatorio';
     if (R.hecha.test(n)) return 'hecha';
     if (R.pend.test(n)) return 'pend';
+    if (R.meta.test(n)) return 'meta';
+    if (R.ventas.test(n)) return 'ventas';
+    if (R.cotizado.test(n)) return 'cotizado';
     if (R.llamar.test(n) && !M.leerFecha(t).iso) return 'llamar';           // con fecha es una tarea
     if (/\b(tengo que|hay que|debo|volver a|no olvidar)\b/.test(n)) return 'tarea';
     // Ventas, facturacion o cobranza no son ni stock ni precio ("cuantas ventas hay hoy"): eso no lo sabe la copia.
@@ -220,8 +227,42 @@
     var map = {}; this.cli = [];
     (o.cli || []).forEach(function (c) { if (!map[c[0]]) map[c[0]] = { r: c[0], n: c[1], l: c[2], f: c[3], m: c[4], d: c[5], c: c[6], b: !!c[7] }; });
     this.cliMap = map; this.cli = Object.keys(map).map(function (r) { return map[r]; });
-    this.cot = o.cot || []; this.tareas = o.tareas || [];
+    this.cot = o.cot || []; this.cotLineas = o.cotLineas || []; this.tareas = o.tareas || [];
     return this;
+  };
+  M.Datos.prototype.usarVentas = function (v, t) { this.ventas = v || null; this.ventasT = t || Date.now(); };
+  // Cotizaciones abiertas de un cliente (o una por folio) con sus productos.
+  M.Datos.prototype.cotizado = function (rut, folio) {
+    var porK = {};
+    this.cotLineas.forEach(function (l) { if ((rut && l[0] !== rut) || (folio && l[1] !== String(folio))) return; (porK[l[0] + '|' + l[1]] = porK[l[0] + '|' + l[1]] || []).push({ cod: l[2], desc: l[3], cant: l[4], monto: l[5] }); });
+    return this.cot.filter(function (c) { return (!rut || c[0] === rut) && (!folio || c[1] === String(folio)); }).sort(function (a, b) { return a[3] - b[3]; })
+      .map(function (c) { return { rut: c[0], folio: c[1], fecha: c[2], dias: c[3], monto: c[4], lineas: (porK[c[0] + '|' + c[1]] || []).sort(function (a, b) { return b.monto - a.monto; }) }; });
+  };
+  // Montos para decirlos: 26.500.000 -> "26,5 millones"; 380.000 -> "380 mil"
+  M.plataTxt = function (n) {
+    n = Math.round(n || 0); var s = n < 0 ? 'menos ' : '', a = Math.abs(n);
+    if (a >= 1e6) { var m = Math.round(a / 1e5) / 10; return s + String(m).replace('.', ',') + (m === 1 ? ' millón' : ' millones'); }
+    if (a >= 1e3) return s + Math.round(a / 1e3) + ' mil';
+    return s + a + ' pesos';
+  };
+  // Que decir de las ventas (vendedor o equipo). tipo 'meta' pone el foco en lo que falta.
+  M.ventasTxt = function (v, tipo) {
+    if (!v) return 'Todavía no tengo las ventas.';
+    var d = new Date(), quedan = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate();
+    var lleva = (v.equipo ? 'El equipo lleva ' : 'Este mes llevas ') + M.plataTxt(v.mes) + (v.docs ? ' en ' + v.docs + (v.docs === 1 ? ' documento' : ' documentos') : '') + (v.equipo ? ' este mes' : '') + '.';
+    var meta = v.meta ? ((v.equipo ? 'La meta del equipo es ' : 'Tu meta es ') + M.plataTxt(v.meta) + ': ' + (v.falta > 0 ? (v.equipo ? 'faltan ' : 'te faltan ') + M.plataTxt(v.falta) + ' (' + v.avance + ' por ciento)' : 'ya está cumplida (' + v.avance + ' por ciento)') + (v.falta > 0 && quedan ? ', con ' + quedan + (quedan === 1 ? ' día' : ' días') + ' por delante' : '') + '.') : (v.equipo ? 'No hay meta cargada este mes.' : 'No tienes meta cargada para este mes.');
+    var eq = v.equipo && v.vendedores ? ' ' + v.vendedores.map(function (x) { return x.nombre.split(' ')[0] + ' ' + M.plataTxt(x.mes) + (x.meta ? ' (' + (x.avance || 0) + '%)' : ''); }).join(', ') + '.' : '';
+    var anio = ' En el año, ' + M.plataTxt(v.anio) + '.';
+    return tipo === 'meta' ? meta + ' ' + lleva + eq + anio : lleva + ' ' + meta + eq + anio;
+  };
+  // Que decir de lo cotizado a un cliente.
+  M.cotizadoTxt = function (nombre, cots) {
+    if (!cots.length) return (nombre || 'Ese cliente') + ' no tiene cotizaciones abiertas.';
+    var frases = cots.slice(0, 2).map(function (c) {
+      var ls = c.lineas.slice(0, 4).map(function (l) { return l.desc.toLowerCase() + (l.cant ? ', ' + l.cant + (l.cant === 1 ? ' unidad' : ' unidades') : ''); });
+      return 'La ' + c.folio + ', de hace ' + c.dias + (c.dias === 1 ? ' día' : ' días') + ' por ' + M.plataTxt(c.monto) + (ls.length ? ': ' + ls.join('; ') + (c.lineas.length > 4 ? '; y ' + (c.lineas.length - 4) + ' más' : '') : '') + '.';
+    });
+    return (nombre ? nombre + ' tiene ' : 'Hay ') + cots.length + (cots.length === 1 ? ' cotización abierta. ' : ' cotizaciones abiertas. ') + frases.join(' ') + (cots.length > 2 ? ' Y ' + (cots.length - 2) + ' más.' : '');
   };
   M.Datos.prototype.clientes = function () { return this.cli.map(function (c) { return { r: c.r, n: c.n, l: c.l }; }); };
   // Busqueda de productos, calcada de _vozBuscar_ de la API (mismos puntajes) mas plurales.
@@ -297,6 +338,14 @@
     var clis = cartera.buscar(texto), cli = clis[0] || null;
     var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
     if (tipo === 'pend') return { tipo: 'pend' };
+    if (tipo === 'ventas' || tipo === 'meta') return { tipo: tipo, resultado: datos.ventas || null };
+    if (tipo === 'cotizado') {
+      var folio = M.cotizacionDe(texto);
+      if (!cli && !folio) { clis = cartera.buscar(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
+      if (!cli && !folio) return { tipo: 'ia', motivo: 'sin cliente' };
+      if (cli && !claro && !folio) return { tipo: 'elegir', clis: clis, para: 'cotizado' };
+      return { tipo: 'cotizado', cli: cli, folio: folio, resultado: datos.t ? datos.cotizado(cli ? cli.r : '', folio) : null };
+    }
     if (tipo === 'precio' || tipo === 'stock') {
       if (cli && !claro && nombrado) return { tipo: 'ia', motivo: 'cliente ambiguo', clis: clis };
       var q = M.productoDe(texto, tipo === 'precio' && claro ? cli : null);
@@ -380,7 +429,7 @@
     this.fetch = opc.fetch || (typeof fetch === 'function' ? fetch.bind(raiz) : null);
     this.cola = []; this.vuelo = { u: 0, e: 0, f: 0 };
   };
-  M.Api.RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1 };
+  M.Api.RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1, ventas: 1 };
   M.Api.RID = { chat: 1, tarea: 1, hecha: 1 };
   M.Api.prototype.llamar = function (accion, datos, opc) {
     opc = opc || {}; datos = Object.assign({}, datos || {}); var self = this;
