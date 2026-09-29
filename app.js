@@ -48,7 +48,7 @@ function numero(w) { return /^\d+$/.test(w) ? +w : (NUM[w] || null); }
    detras (tarea, hecha: la persona ya oyo "listo"), "f" el segundo plano (la copia de datos,
    el contador). "e" y "f" esperan a que no haya nada de la persona en curso. */
 var API_COLA = [], API_VUELO = { u: 0, e: 0, f: 0 }, API_TOPE = 35000, API_PLAZO = 75000, API_PAUSA = { corta: 800, larga: 15000 };
-var API_RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1, ventas: 1 }, API_RID = { chat: 1, tarea: 1, hecha: 1 };
+var API_RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1, ventas: 1, gestiones: 1 }, API_RID = { chat: 1, tarea: 1, hecha: 1, gestion: 1, gestionBorrar: 1 };
 function ridNuevo() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 function api(accion, datos, opc) {
   opc = opc || {}; datos = Object.assign({}, datos || {});
@@ -227,136 +227,20 @@ function buscarClientes(frase, laxo) {
   return out.slice(0, 4).map(function (x) { return x.c; });
 }
 
-// ------------------------------------------------------------------ fechas y horas
-function leerFecha(f) {
-  var t = ' ' + norm(f) + ' ', d = null, hora = '', usado = [];
-  function quita(rx) { var m = t.match(rx); if (m) { usado.push(m[0].trim()); t = t.replace(rx, ' '); } return m; }
-  var h0 = hoy0(), m;
-  // Momento del dia
-  if (quita(/ (en|por|de) la manana /)) hora = '09:00';
-  if (quita(/ (en|por|de) la tarde /)) hora = hora || '15:00';
-  if (quita(/ al mediodia /)) hora = '12:00';
-  if ((m = quita(/ a las? (\d{1,2})(?:[:.](\d{2})| y (media|cuarto))?(?: (de la (manana|tarde|noche)|am|pm|hrs|horas))? /))) {
-    var hh = +m[1], mm = m[2] ? +m[2] : (m[3] === 'media' ? 30 : (m[3] === 'cuarto' ? 15 : 0));
-    var q = m[5] || m[4] || '';
-    if ((q === 'tarde' || q === 'noche' || q === 'pm') && hh < 12) hh += 12;
-    else if (!q && hh >= 1 && hh <= 7) hh += 12;          // "a las 3" en horario de oficina es la tarde
-    hora = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
-  } else if ((m = quita(/ (\d{1,2}):(\d{2}) /))) hora = ('0' + m[1]).slice(-2) + ':' + m[2];
-  // Dia
-  if (quita(/ pasado manana /)) { d = new Date(h0); d.setDate(d.getDate() + 2); }
-  else if (quita(/ manana /)) { d = new Date(h0); d.setDate(d.getDate() + 1); }
-  else if (quita(/ hoy /)) d = new Date(h0);
-  else if ((m = quita(/ en (\w+) (dia|dias|semana|semanas|mes|meses) /))) {
-    var n = numero(m[1]); if (n) { d = new Date(h0); if (/^dia/.test(m[2])) d.setDate(d.getDate() + n); else if (/^semana/.test(m[2])) d.setDate(d.getDate() + 7 * n); else d.setMonth(d.getMonth() + n); }
-  } else if (quita(/ (la |para la )?(proxima|siguiente) semana /)) { d = new Date(h0); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); }
-  else if (quita(/ (a |para )?fin de mes /)) { d = new Date(h0.getFullYear(), h0.getMonth() + 1, 0); while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1); }
-  else if ((m = quita(/ (?:el |este |para el |el proximo |proximo )?(lunes|martes|miercoles|jueves|viernes|sabado|domingo) /))) {
-    var obj = DIAS.indexOf(m[1]); d = new Date(h0); var dd = (obj - d.getDay() + 7) % 7;
-    if (dd === 0 && !/este/.test(m[0])) dd = 7; d.setDate(d.getDate() + dd);
-  } else if ((m = quita(/ (?:el |para el )?(\d{1,2}) de (enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre) /))) {
-    var mes = MESES.indexOf(m[2] === 'setiembre' ? 'septiembre' : m[2]); d = new Date(h0.getFullYear(), mes, +m[1]); if (d < h0) d.setFullYear(d.getFullYear() + 1);
-  } else if ((m = quita(/ (\d{1,2})\/(\d{1,2}) /))) {
-    d = new Date(h0.getFullYear(), +m[2] - 1, +m[1]); if (d < h0) d.setFullYear(d.getFullYear() + 1);
-  } else if ((m = quita(/ (?:el|para el) (\d{1,2}) /))) {
-    d = new Date(h0.getFullYear(), h0.getMonth(), +m[1]); if (d < h0) d.setMonth(d.getMonth() + 1);
-  }
-  return { iso: d ? iso(d) : '', hora: hora, usado: usado };
-}
-
-// ------------------------------------------------------------------ que se quiere hacer
-var R = {
-  hecha: /\b(marca(r|la|lo)? (como )?(hecha|hecho|lista|listo|terminada)|ya (llame|hable|visite|hice|envie|mande|cotice)|termine (la tarea|de)|completar tarea)\b/,
-  // "que tengo hoy" si; "que tengo cotizado a X" no (25-09-2026: eso es una consulta del cliente)
-  pend: /\b(que tengo( pendiente\w*| que hacer)?( para| de)? (hoy|manana|esta semana)|que tengo pendiente\w*|(mis|los|las) (pendientes|tareas|recordatorios)|que me toca|pendientes (de|para) (hoy|manana)|que hay (para|de) hoy|mi agenda|agenda de hoy)\b|^ que tengo $/,
-  record: /\b(recuerd\w*|recordatorio|recordar|avisame|acuerdame|no (me )?olvid\w*)\b/,
-  llamar: /^ (quiero |necesito |voy a |hay que )?(llama\w*|marca\w*) (a |al |la |el |con )?/,
-  contacto: /\b(telefono|fono|celular|numero de (telefono|contacto)|correo|mail|email|direccion|donde queda|ubicacion|contacto de|datos (de|del)|ficha (de|del)|que sabes de|informacion (de|del))\b/,
-  cotiz: /\b(cotizaciones?( abiertas| pendientes)? (de|del|a|para)|que (le )?(tengo |he )?cotizad\w*|que le cotice)\b/,
-  cotizado: /\b(que (le |les )?(hemos |he |tengo |tiene |tenemos |les |le )?cotiz(ado|amos|aste|e)\b|productos?( \w+){0,2} cotizad\w*|tiene\w* cotizad\w*|que (hay|va|viene|tiene|trae) (en )?la cotizacion|detalle de (la )?cotizacion|que (le )?cotice|cotizado a|que le (estamos|estoy) cotizando)\b/,
-  ventas: /\b(mis ventas|cuant[oa]s? (se )?(lleva\w*|llevo|hemos|he|va|van|vamos|voy) (vendid\w*|facturad\w*)|cuanto (vendi|vendimos|vendio|facturamos|facture)\b|cuantas ventas|ventas? (de |del )?(hoy|mes|ano|semana)|como voy\b|como vamos\b|vendido (este|del|en el) (mes|ano)|vendido hoy|facturacion del mes|cuanto (llevo|vamos|voy) (en )?(el )?mes|cuanto (he|hemos) vendido|lo vendido|mi facturacion)\b/,
-  meta: /\b(mi meta|cual es (mi|la) meta|meta del mes|cuanto (me |nos )?falta (para|por) (la meta|vender|cumplir|llegar|facturar)|cuanto (me|nos) falta|como (voy|vamos) con la meta|avance de (la )?meta|(estoy|estamos|vamos a) (cumpliendo|llegando|llegar)|voy a llegar|cumpliendo la meta)\b/,
-  compras: /\b(cuanto (me |nos |le )?(ha|han|hemos|he) (comprado|vendido)|ultima compra|cuando (me |nos )?compro|que (me |nos )?(ha |han )?comprado|que compro\b|que le (hemos |he )?vendido|compras de|historial de compras|cuanto (me )?compra\b|cuanto (le )?(vendemos|vendo) a)\b/,
-  riesgo: /\b(clientes? (en riesgo|sin compras?|que no (me |nos )?(compran?|han comprado)|perdidos?|dormidos?|inactivos?|que dejaron de comprar)|quien(es)? no (me |nos )?(ha |han )?compra\w*|a quien(es)? (tengo que |debo |deberia )?(visitar|llamar|contactar)|que clientes (visito|llamo|debo visitar)|no me han comprado|dejaron de comprar)\b/,
-  mejores: /\b(mejores clientes|quien(es)? (me )?(ha |han )?comprado mas|top (de )?clientes|clientes que mas (me )?compran|mayores clientes|clientes mas grandes|quien compra mas)\b/,
-  stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
-  precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
-  visita: /\b(visite|visitamos|estuve (con|en|donde)|fui (a|donde)|pase (a|por|donde)|me reuni|reunion con)\b/,
-  prosp: /\b(prospect\w*|nuevo (negocio|cliente|proyecto)|oportunidad|posible (cliente|negocio)|potencial cliente)\b/,
-  tarea: /\b(tarea|tengo que|hay que|debo|volver a (llamar|consultar|contactar|visitar|escribir|cotizar)|llamar a|consultar a|enviar|mandar|agendar)\b/
-};
-// Cortesias y rodeos al inicio ("hola, me puedes guardar un recordatorio para...") -> la orden pelada.
-function limpiarOrden(t) {
-  var s = ' ' + String(t == null ? '' : t).trim() + ' ';
-  s = s.replace(/^\s*(hola|oye|oiga|por favor|porfa|mira|a ver|ok|bueno|entonces)[,.]?\s+(?=\S)/i, ' ');   // solo si sigue algo ("ok" solo es un si)
-  s = s.replace(/^\s*(me )?(puedes|podr[ií]as|quiero que|necesito que|quisiera que|quiero|necesito|quisiera|me gustar[ií]a que|me gustar[ií]a|ay[uú]dame a|te pido que|por favor)\s+/i, ' ');
-  s = s.replace(/^\s*(guarda(r|rme|me)?|agrega(r|rme|me)?|crea(r|rme|me)?|pon(er|erme|me)?|registra(r|rme|me)?|agenda(r|rme|me)?|anota(r|rme|me)?|hacer|haz(me)?)\s+(un |una |el |la )?(recordatorio|aviso|alarma)\s*(para que|para|de que|de|que|:)?\s*/i, ' recuérdame ');
-  s = s.replace(/^\s*(un |una )?(recordatorio|aviso)\s+(para que|para|de que|de|que)\s+/i, ' recuérdame ');
-  s = s.replace(/^\s*(guarda(r|rme|me)?|agrega(r|rme|me)?|crea(r|rme|me)?|pon(er|erme|me)?|registra(r|rme|me)?|anota(r|rme|me)?)\s+(una |la )?tarea\s*(para que|para|de que|de|que|:)?\s*/i, ' tengo que ');
-  s = s.replace(/^\s*(guarda(r|rme|me)?|agrega(r|rme|me)?|crea(r|rme|me)?|pon(er|erme|me)?|registra(r|rme|me)?|deja(r|rme|me)?|toma(r)?)\s+(una |la )?nota\s*(de que|de|que|:)?\s*/i, ' anota que ');
-  s = s.replace(/^\s*(recordarme|que me recuerdes|recu[eé]rdame que|recu[eé]rdame de|recu[eé]rdame)\s+/i, ' recuérdame ');
-  s = s.replace(/^\s*(buscar|busca|buscame|b[uú]scame|consultar|consulta|ver|revisar|revisa)\s+(los |las |el |la )?(datos|informaci[oó]n|info|ficha)\s+(de |del |de la )?(cliente |empresa )?/i, ' datos de ');
-  return s.replace(/\s+/g, ' ').trim();
-}
-function intencion(t) {
-  var n = ' ' + norm(t) + ' ';
-  if (n.split(' ').length <= 7 && /^ (hola|buenos dias|buenas tardes|buenas noches|buenas|que tal|como estas|como esta|gracias|muchas gracias|ok gracias|listo gracias|chao|adios|hasta luego|nos vemos|hola buenos dias|hola buenas|hola que tal)( \w+){0,2} $/.test(n)) return 'saludo';
-  if (/\b(que (puedes|sabes|podrias|puedo) (hacer|preguntar\w*|pedir\w*|consultar)|en que (me )?(puedes |podrias )?ayud\w*|necesito ayuda|como funciona\w*|que haces|para que sirves|que cosas (puedes|haces|sabes)|instrucciones|que (me )?ofreces)\b/.test(n)
-    || /^ (ayuda|ayudame) $/.test(n)
-    || /^ (me )?(puedes|sabes|podrias) (buscar|consultar|ver|revisar|darme|entregar|decir) (los |las )?(datos|informacion|info|precios|stock|cotizaciones|pendientes|clientes|productos)( de (los |las )?(clientes?|productos?))? $/.test(n)) return 'ayuda';
-  if (R.record.test(n)) return 'recordatorio';
-  if (R.hecha.test(n)) return 'hecha';
-  if (R.pend.test(n)) return 'pend';
-  if (R.meta.test(n)) return 'meta';
-  if (R.riesgo.test(n)) return 'riesgo';
-  if (R.mejores.test(n)) return 'mejores';
-  if (R.compras.test(n)) return 'compras';
-  if (R.ventas.test(n)) return 'ventas';
-  if (R.cotizado.test(n)) return 'cotizado';
-  // "Llama a Clima Norte" es llamar ahora; con fecha ("llamar a Clima Norte el martes") es una tarea.
-  if (R.llamar.test(n) && !leerFecha(t).iso) return 'llamar';
-  // "Tengo que enviar la lista de precios" es una tarea, no una consulta de precio.
-  if (/\b(tengo que|hay que|debo|volver a|no olvidar)\b/.test(n)) return 'tarea';
-  // Ventas, facturacion o cobranza no son ni stock ni precio ("cuantas ventas hay hoy"): eso no lo sabe la copia.
-  var ventas = /\b(ventas?|vendid\w*|vendimos|vendio|vendi|factur\w*|cobranza|cobrad\w*)\b/.test(n);
-  var orden = ['contacto', 'cotiz', 'stock', 'precio', 'visita', 'prosp', 'tarea'];
-  for (var i = 0; i < orden.length; i++) if (R[orden[i]].test(n) && !(ventas && (orden[i] === 'stock' || orden[i] === 'precio'))) return orden[i];
-  // Humberto (25-09-2026): "siempre cree que estoy creando una nota". Una nota solo si se pide;
-  // una fecha sola es recordatorio solo si no es una pregunta; lo demas no se adivina.
-  if (/ (anota\w*|apunta\w*|nota|registra que|deja (una )?nota) /.test(n)) return 'nota';
-  // Humberto (25-09-2026, dos veces): "pregunte algo y se anoto como recordatorio". Una fecha sola
-  // ("hoy", "manana") es recordatorio SOLO si la frase no tiene forma de pregunta ni de pedido de
-  // informacion en ninguna parte; lo demas no se adivina (va a la IA o se dice que no se entendio).
-  var pregunta = /\?/.test(t) || /^ (que|cual|cuales|cuanto|cuanta|cuantos|cuantas|como|donde|quien|quienes|cuando|dame|dime|busca\w*|muestrame) /.test(n)
-    || /\b(cuanto|cuanta|cuantos|cuantas|cual|cuales|donde|quien|quienes|dame|dime|busca\w*|muestrame|puedes|podrias|quiero saber|necesito saber|sabes|cuentame|me dices|informame|vendido|vendimos|ventas|facturado|cobrado)\b/.test(n);
-  return !pregunta && leerFecha(t).iso ? 'recordatorio' : 'nose';
-}
-function capital(s) { s = String(s || '').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-// Lo que queda de la frase para usar como titulo: sin la orden ni la fecha.
-function tituloDe(t, fecha) {
-  var s = ' ' + String(t) + ' ';
-  fecha.usado.forEach(function (u) {
-    var rx = new RegExp(' ' + u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').split(' ').map(function (w) { return w.replace(/[aeiou]/g, '[aeiouáéíóú]').replace(/n/g, '[nñ]'); }).join(' ') + ' ', 'i');
-    s = s.replace(rx, ' ');
-  });
-  s = s.replace(/^\s*(recu[eé]rdame|recordarme|recordatorio( de| para)?|recordar|av[ií]same|acu[eé]rdame|anota( que)?|tengo que|hay que|debo|tarea( de| para)?)\s+/i, ' ');
-  s = s.replace(/^\s*(que|de)\s+/i, ' ');
-  return capital(s.replace(/\s+/g, ' ').trim()).slice(0, 150);
-}
-function cotizacionDe(t) { var m = norm(t).match(/cotizacion(?:es)?(?: (?:numero|nro|n|no))? ?(\d{3,7})/); return m ? m[1] : ''; }
-function productoDe(t, cli) {
-  var s = ' ' + norm(t) + ' ';
-  s = s.replace(/ (dame|dime|me das|me dices|quiero|necesito|consulta(r)?|cual es|el|la|los|las)( | el | la )/g, ' ');
-  s = s.replace(/ (precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|a cuanto|valor (de|del)|stock|hay stock|hay disponible|disponibilidad|cuant[oa]s? (hay|quedan|tenemos)|tenemos|tienen|tengo) /g, ' ');
-  if (cli) { cli._t.forEach(function (w) { s = s.replace(new RegExp(' ' + w + ' ', 'g'), ' '); }); s = s.replace(/ (para|a|al|del|de) (cliente )?\s*$/, ' '); s = s.replace(/ para (el cliente )?$/, ' '); }
-  // Refrigerantes como los dicta Chrome: "erre 410 a", "R 410 A", "r-32" -> r410a, r32
-  s = s.replace(/ erre /g, ' r ').replace(/ r ?-? ?(\d{2,3}) ?([a-z])?(?= )/g, function (x, n, l) { return ' r' + n + (l || '') + ' '; });
-  s = s.replace(/ (refrigerante|gas|bombona|freon) (\d{2,3}[a-z]?)(?= )/g, ' $1 r$2 ');       // "refrigerante 507" = r507
-  // Numeros dictados: "cinco cfm" = "5 cfm", "cuatro coma cinco" = "4.5" (un/una son articulos, no se tocan)
-  s = s.replace(/ (dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta)(?= )/g, function (x, w) { return ' ' + NUM[w]; });
-  s = s.replace(/(\d) (coma|punto) (\d)/g, '$1.$3').replace(/(\d) y medi[oa](?= )/g, '$1.5');
-  return s.replace(/ (de|del|para|el|la|un|una)(?= )/g, ' ').replace(/ (de|del|para|el|la|un|una)(?= )/g, ' ').replace(/\s+/g, ' ').trim();
-}
+// ------------------------------------------------------------------ entender la frase
+/* 29-09-2026: las reglas (fechas, que se quiere hacer, titulo, producto) viven en motor.js, el mismo que usan el modo voz y la
+   consulta del CRM. Antes estaban copiadas aqui; con las gestiones y lo demas del 28-09 se dejo una sola copia. */
+var M = window.VozMotor, R = M.R;
+function leerFecha(f) { return M.leerFecha(f); }
+function limpiarOrden(t) { return M.limpiarOrden(t); }
+function intencion(t) { return M.intencion(t); }
+function capital(s) { return M.capital(s); }
+function tituloDe(t, fecha) { return M.tituloDe(t, fecha); }
+function cotizacionDe(t) { return M.cotizacionDe(t); }
+function productoDe(t, cli) { return M.productoDe(t, cli); }
+// La copia de datos tambien en la forma del motor, para lo que el motor sabe responder (gestiones, cotizaciones por estado, ano anterior, documentos).
+var DM = new M.Datos(), CM = new M.Cartera();
+function ventasUsar(v, t) { DAT.ventas = v; DM.usarVentas(v, t); }
 
 // ------------------------------------------------------------------ copia de datos en el telefono (25-09-2026 tarde)
 /* Humberto: "quisiera que fuera la experiencia como con Siri: que yo le pida algo y lo haga o me
@@ -376,6 +260,7 @@ function datosUsar(o, t) {
   });
   DAT.cliMap = {}; (o.cli || []).forEach(function (c) { DAT.cliMap[c[0]] = { r: c[0], n: c[1], l: c[2], f: c[3], m: c[4], d: c[5], c: c[6], b: !!c[7] }; });
   DAT.cot = o.cot || []; DAT.cotLineas = o.cotLineas || [];
+  DM.usar(o, DAT.t); CM.cargar(DM.clientes());
   if (o.tareas) { PEND = pendMezclar(o.tareas); PEND_T = DAT.t; pintarBadge(); }
   if (o.cli && o.cli.length) {
     CLI = { lista: o.cli.map(function (c) { return { r: c[0], n: c[1], l: c[2] }; }), t: DAT.t }; lsSet(LS.cli, CLI); prepararClientes();
@@ -383,7 +268,7 @@ function datosUsar(o, t) {
   }
 }
 function datosGuardar(o) { try { localStorage.setItem('voz_datos', JSON.stringify({ t: Date.now(), o: o })); } catch (e) {} }
-function datosCargar() { var d = lsGet('voz_datos', null); if (d && d.o) datosUsar(d.o, d.t); var v = lsGet('voz_ventas', null); if (v && v.v && Date.now() - v.t < 3 * 3600000) DAT.ventas = v.v; }
+function datosCargar() { var d = lsGet('voz_datos', null); if (d && d.o) datosUsar(d.o, d.t); var v = lsGet('voz_ventas', null); if (v && v.v && Date.now() - v.t < 3 * 3600000) ventasUsar(v.v, v.t); }
 function datosPedir(forzar) {
   if (DAT_PIDIENDO || !navigator.onLine) return;
   if (!forzar && Date.now() - DAT.t < 20 * 60000) return;
@@ -463,13 +348,24 @@ function rapido(texto) {
   if (tipo !== 'saludo' && tipo !== 'ayuda') { texto = limpiarOrden(texto); tipo = intencion(texto); n = ' ' + norm(texto) + ' '; }
   if (tipo === 'saludo' || tipo === 'ayuda') {
     var m0 = tipo === 'saludo' ? (/gracias/.test(n) ? 'De nada.' : /chao|adios|hasta luego/.test(n) ? 'Chao, que te vaya bien.' : 'Hola. ¿Qué necesitas? Precios, stock, datos de un cliente, tus pendientes o un recordatorio.')
-      : 'Puedo decirte precio y stock de un producto; teléfono, dirección y cotizaciones abiertas de un cliente; tus pendientes; y guardar recordatorios, tareas y notas. Por ejemplo: "precio del R410A para Clima Norte", "teléfono de Refritec", "recuérdame llamar a Frío Sur mañana a las 10".';
+      : 'Puedo decirte precio y stock de un producto; teléfono, dirección, cotizaciones, compras, facturas y gestiones de un cliente; tus ventas, tu meta y cómo vas contra el año pasado; tus pendientes; y registrar gestiones, recordatorios, tareas y notas. Por ejemplo: "llamé a Clima Norte y quedó en enviar la orden", "qué hablé con Refritec", "últimas facturas de Frío Sur".';
     $('vivo').textContent = texto; estado(m0); decir(m0); return true;
   }
   if (!DAT.t) return false;
   var clis = buscarClientes(texto), cli = clis[0] || null;
   var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
   if (tipo === 'pend') { $('vivo').textContent = texto; verPendientes(true); return true; }
+  // Gestiones, cotizaciones por estado, ano anterior y documentos (28-09-2026): lo resuelve el motor.
+  if (/^(gestion|visita|gestiones|cotvend|comparar|docs)$/.test(tipo)) {
+    var rm = M.interpretar(texto, { datos: DM, cartera: CM });
+    if (rm.tipo === 'ia') return false;
+    $('vivo').textContent = texto;
+    if (rm.tipo === 'elegir') elegirCliente(rm.clis, rm.para);
+    else if (rm.tipo === 'borrador') tarjetaGestion(rm.borrador);
+    else if (rm.tipo === 'gestiones') verVista(rm);
+    else conVentas(function () { verVista(rm); }, true);
+    return true;
+  }
   if (tipo === 'ventas' || tipo === 'meta') { $('vivo').textContent = texto; verVentas(tipo, / hoy /.test(n) ? 'hoy' : / semana /.test(n) ? 'semana' : ''); return true; }
   if (tipo === 'riesgo' || tipo === 'mejores') { $('vivo').textContent = texto; verCartera(tipo === 'mejores' ? (/ (ano|anual|este ano) /.test(n) ? 'mejores_anio' : 'mejores_mes') : 'riesgo'); return true; }
   if (tipo === 'compras') {
@@ -513,7 +409,55 @@ function elegirCliente(clis, tipo) {
   }).join('') + '</div></div>');
   estado('¿Cuál de estos?'); decir('¿Cuál de estos? ' + clis.slice(0, 3).map(function (c) { return c.n; }).join(', '));
 }
-function verFicha(rut, tipo) { if (tipo === 'cotizado') return verCotizado(CLI_POR_RUT[rut], ''); if (tipo === 'compras') return verCompras(CLI_POR_RUT[rut]); var f = fichaLocal(rut); if (f) { pintarFicha(f, tipo); estado('Toca y habla'); } else if (CLI_POR_RUT[rut]) fichaCliente(CLI_POR_RUT[rut], tipo, ''); }
+function verFicha(rut, tipo) {
+  if (tipo === 'gestion') { if (BORR && BORR.tipo === 'gestion') { BORR.cli = rut; tarjetaGestion(BORR); } return; }
+  if (tipo === 'gestiones' || tipo === 'docs') { var rv = { tipo: tipo, cli: CM.porRut[rut], periodo: '' }; if (tipo === 'docs') conVentas(function () { verVista(rv); }, true); else verVista(rv); return; }
+  if (tipo === 'cotizado') return verCotizado(CLI_POR_RUT[rut], ''); if (tipo === 'compras') return verCompras(CLI_POR_RUT[rut]); var f = fichaLocal(rut); if (f) { pintarFicha(f, tipo); estado('Toca y habla'); } else if (CLI_POR_RUT[rut]) fichaCliente(CLI_POR_RUT[rut], tipo, ''); }
+// Lo que arma el motor (titulo, filas y lo que se dice), pintado con los estilos de esta pantalla.
+function verVista(r) {
+  var v = M.vista(r, DM);
+  pintar('<div class="card"><h3>' + esc(v.titulo) + (v.etiqueta ? ' <span class="tag">' + esc(v.etiqueta) + '</span>' : '') + '</h3>' + (v.nombre ? '<div style="font-weight:700;font-size:17px;margin-bottom:6px">' + esc(v.nombre) + '</div>' : '')
+    + v.filas.map(function (f) { return '<div class="fila"' + (f.rut && !r.cli ? ' style="cursor:pointer" onclick="verFicha(\'' + esc(f.rut) + '\',\'contacto\')"' : '') + '><div><div class="n">' + esc(f.n) + '</div><div class="s">' + esc(f.s) + '</div></div><div class="v">' + esc(f.v) + (f.vs ? '<small>' + esc(f.vs) + '</small>' : '') + '</div></div>'; }).join('')
+    + (v.nota ? '<div class="nota">' + esc(v.nota) + '</div>' : '') + '</div>');
+  estado('Toca y habla'); decir(v.dicho); histAgregar(v.titulo + (v.nombre ? ': ' + v.nombre : ''));
+}
+/* Registrar una gestion (28-09-2026): "llamé a X y quedó en...". Se confirma con el detalle; se puede corregir hablando
+   ("fue por WhatsApp", "fue ayer", "agrega que...") o en la tarjeta. La jefatura la deja a nombre del vendedor del cliente. */
+function aNombreDe(b) { if (!DM.todos || DM.cod) return ''; var v = (DM.cliMap[b.cli] || {}).v; return v && DM.vend[v] ? String(DM.vend[v]).split(' ')[0] : ''; }
+function tarjetaGestion(b) {
+  BORR = b; HECHA_PEND = null; RESP_INTENTOS = 0;
+  if (!b.cli) {
+    if (b.clis.length) { elegirCliente(b.clis, 'gestion'); return; }
+    BORR = null; var m0 = '¿Con qué cliente fue? Dilo con su nombre: por ejemplo, llamé a Clima Norte y quedó en enviar la orden.'; estado(m0); decir(m0); return;
+  }
+  var c = CM.porRut[b.cli];
+  if (DM.todos && !DM.cod && !aNombreDe(b)) { BORR = null; var m1 = (c ? c.n : 'Ese cliente') + ' no tiene asignado un vendedor del equipo: no se puede registrar la gestión.'; estado(m1, 'err'); decir(m1); return; }
+  pintarGestion(); preguntar(M.fraseGestion(b, CM, aNombreDe(b)));
+}
+function pintarGestion() {
+  var b = BORR, c = CM.porRut[b.cli], quien = aNombreDe(b);
+  function opc(lista, val, vacio) { return (vacio ? '<option value="">' + vacio + '</option>' : '') + lista.map(function (x) { return '<option' + (x === val ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join(''); }
+  pintar('<div class="card" id="gest"><h3>Registrar gestión' + (b.cot ? ' <span class="tag">Cot. ' + esc(b.cot) + '</span>' : '') + (quien ? ' <span class="tag">A nombre de ' + esc(quien) + '</span>' : '') + '</h3>'
+    + '<div style="font-weight:700;font-size:17px;margin-bottom:6px">' + esc(c ? c.n : '') + '</div>'
+    + '<div class="dos"><div class="campo"><label for="gTipo">Tipo</label><select id="gTipo">' + opc(M.GEST_TIPOS, b.gtipo) + '</select></div><div class="campo"><label for="gMet">Medio</label><select id="gMet">' + opc(M.GEST_METODOS, b.metodo, '—') + '</select></div></div>'
+    + '<div class="dos"><div class="campo"><label for="gFec">Fecha</label><input id="gFec" type="date" max="' + iso(hoy0()) + '" value="' + esc(b.fecha) + '"></div><div class="campo"><label for="gCot">N° cotización</label><input id="gCot" inputmode="numeric" value="' + esc(b.cot || '') + '"></div></div>'
+    + '<div class="campo"><label for="gCom">Comentario</label><textarea id="gCom">' + esc(b.comentario || '') + '</textarea></div>'
+    + '<div class="acciones"><button type="button" class="btn s" id="bNo">Cancelar</button><button type="button" class="btn p" id="bSi">Registrar</button></div></div>');
+  $('bSi').onclick = guardarGestion; $('bNo').onclick = cancelarBorrador;
+}
+function leerGestion() {
+  if (!BORR || BORR.tipo !== 'gestion' || !$('gTipo') || !$('gTipo').value) return;
+  BORR.gtipo = $('gTipo').value; BORR.metodo = $('gMet').value; BORR.fecha = $('gFec').value || iso(hoy0()); BORR.cot = String($('gCot').value || '').trim(); BORR.comentario = String($('gCom').value || '').trim();
+}
+function guardarGestion() {
+  leerGestion(); var b = BORR; if (!b) return;
+  var d = M.datosGestion(b, CM); BORR = null;
+  DM.gest.unshift({ f: d.fecha, rut: d.rut, n: d.cliente, tipo: d.tipo, met: d.metodo, cot: d.cot, contacto: '', com: d.comentario, vc: DM.cod || (DM.cliMap[d.rut] || {}).v || '', folio: 'prov-' + d.rid, rid: d.rid });
+  pintar('<div class="card"><h3>Gestión registrada</h3><div class="n" style="font-weight:600">' + esc(d.cliente) + '</div><div class="nota">' + esc(capital(M.gestTxt(d.tipo, d.metodo))) + ' · ' + esc(capital(M.haceTxt(d.fecha))) + (d.comentario ? ' · ' + esc(d.comentario) : '') + '</div>'
+    + '<div class="nota" id="env_' + d.rid + '">' + (navigator.onLine ? 'Enviando al CRM…' : 'Sin señal: se enviará al CRM cuando vuelva.') + '</div></div>');
+  decir('Listo, registré la gestión con ' + d.cliente + '.'); estado('Toca y habla');
+  colaAgregar('gestion', d, 'Gestión con ' + d.cliente);
+}
 // Compras por cliente y cartera (riesgo / mejores): salen de DAT.ventas.clientes [rut, vendedor, mes, ano, ultima, productos, docs]
 function comprasDe(rut) {
   var c = ((DAT.ventas && DAT.ventas.clientes) || []).filter(function (x) { return x[0] === rut; })[0]; if (!c) return null;
@@ -526,10 +470,10 @@ function carteraLocal(tipo) {
   if (tipo === 'mejores_mes') return out.filter(function (c) { return c.mes > 0; }).sort(function (a, b) { return b.mes - a.mes; });
   return out.filter(function (c) { return c.anio > 0; }).sort(function (a, b) { return b.anio - a.anio; });
 }
-function conVentas(fn) {
-  if (DAT.ventas) return fn();
+function conVentas(fn, nuevo) {
+  if (DAT.ventas && !(nuevo && DM.ventasViejas)) return fn();
   estado('Trayendo tus ventas…');
-  api('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) { estado(v.error || 'No se pudo.', 'err'); return; } DAT.ventas = v; lsSet('voz_ventas', { t: Date.now(), v: v }); fn(); }).catch(function (e) { estado(errTxt(e), 'err'); });
+  api('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) { estado(v.error || 'No se pudo.', 'err'); return; } ventasUsar(v); lsSet('voz_ventas', { t: Date.now(), v: v }); fn(); }).catch(function (e) { estado(errTxt(e), 'err'); });
 }
 function verCompras(cli) {
   conVentas(function () {
@@ -586,7 +530,7 @@ function pintarVentas(v, tipo, periodo) {
   estado('Toca y habla'); decir(ventasTxt(v, tipo, periodo)); histAgregar('Ventas del mes');
 }
 function verVentas(tipo, periodo) { conVentas(function () { pintarVentas(DAT.ventas, tipo, periodo); }); }
-function ventasPedir() { api('ventas', {}, { fondo: true, plazo: 150000, releer: 2 }).then(function (v) { if (v.ok) { DAT.ventas = v; lsSet('voz_ventas', { t: Date.now(), v: v }); } }).catch(function () {}); }
+function ventasPedir() { api('ventas', {}, { fondo: true, plazo: 150000, releer: 2 }).then(function (v) { if (v.ok) { ventasUsar(v); lsSet('voz_ventas', { t: Date.now(), v: v }); } }).catch(function () {}); }
 function procesarLocal(texto) {
   $('vivo').textContent = texto;
   var tipo = intencion(texto), clis = buscarClientes(texto), cli = clis[0] || null;
@@ -752,6 +696,16 @@ function responder(texto) {
     return false;                                                            // otra cosa: orden nueva
   }
   if (!BORR) return false;
+  if (BORR.tipo === 'gestion') {
+    leerGestion();
+    if (M.corregirGestion(BORR, texto, CM).length) { RESP_INTENTOS = 0; pintarGestion(); preguntar('Queda así. ' + M.fraseGestion(BORR, CM, aNombreDe(BORR))); return true; }
+    var rg = siNo(n);
+    if (rg > 0) { guardarGestion(); return true; }
+    if (rg < 0) { cancelarBorrador(); decir('Bien, no la registro.'); return true; }
+    if (/^(precio|stock|contacto|cotiz|pend|llamar|hecha|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado)$/.test(intencion(texto))) { BORR = null; RESP_INTENTOS = 0; return false; }
+    if (++RESP_INTENTOS <= 1) { preguntar('No te entendí. Di sí para registrarla, no para descartarla, o dime qué cambio.'); return true; }
+    estado('Revisa la tarjeta y toca Registrar o Cancelar'); return true;
+  }
   leerBorrador(); var b = BORR, cambios = [];
   // 1) Correcciones (tienen prioridad: "no, para el jueves" corrige, no descarta)
   var f = leerFecha(texto);
@@ -810,11 +764,13 @@ function colaListo(x, o) {
     if (el) { el.className = 'nota'; el.textContent = '✓ Guardado en el CRM' + (o.aviso === 'ok' ? ' · con aviso en tu teléfono' : ''); }
     histAgregar('✓ ' + x.txt);
   } else if (x.a === 'hecha') { if (el) { el.className = 'nota'; el.textContent = '✓ Marcada en el CRM'; } histAgregar('✓ Hecha: ' + x.txt); }
+  else if (x.a === 'gestion') { DM.gest.forEach(function (g) { if (g.rid === x.d.rid) g.folio = o.folio || g.folio; }); if (el) { el.className = 'nota'; el.textContent = o.prueba ? '✓ Registrada en modo prueba (todavía no va al CRM)' : '✓ Registrada en el CRM'; } histAgregar('✓ ' + x.txt); return; }
   cargarPendientes(null, true);
 }
 function colaFallo(x, err, quizas) {
-  var m = (x.a === 'tarea' ? (quizas ? 'Sin confirmación del CRM para: ' : 'No quedó guardado en el CRM: ') : 'No se marcó como hecha: ') + x.txt + '. ' + err;
+  var m = (x.a === 'tarea' || x.a === 'gestion' ? (quizas ? 'Sin confirmación del CRM para: ' : 'No quedó guardado en el CRM: ') : 'No se marcó como hecha: ') + x.txt + '. ' + err;
   if (x.a === 'tarea' && !quizas) PEND = PEND.filter(function (t) { return t.id !== 'prov-' + x.d.rid; });
+  if (x.a === 'gestion' && !quizas) DM.gest = DM.gest.filter(function (g) { return g.rid !== x.d.rid; });
   if (x.a === 'hecha' && !quizas) cargarPendientes(null, true);
   pintarBadge();
   var el = $('env_' + x.d.rid); if (el) { el.className = 'nota err'; el.textContent = m; }
@@ -971,6 +927,7 @@ function tarjetaChat(t) {
   }
   if (t.tipo === 'guardado') return '<div class="tt">Guardado en el CRM</div><div class="n" style="font-weight:600">' + esc(d.titulo) + '</div><div class="nota">' + esc(capital(fechaTxt(d.fecha))) + (d.hora ? ' a las ' + esc(d.hora) : '') + (d.cliente ? ' · ' + esc(d.cliente) : '') + (d.aviso === 'ok' ? ' · con aviso en tu teléfono' : '') + '</div>';
   if (t.tipo === 'hecha') return '<div class="tt">Marcada como hecha</div>';
+  if (t.tipo === 'gestion') return '<div class="tt">' + (d.prueba ? 'Gestión registrada (modo prueba)' : 'Gestión registrada en el CRM') + '</div><div class="n" style="font-weight:600">' + esc(d.cliente) + '</div><div class="nota">' + esc(capital(M.gestTxt(d.tipo, d.metodo))) + (d.comentario ? ' · ' + esc(d.comentario) : '') + '</div>';
   return '';
 }
 function nuevaConversacion() { CHAT = { t: 0, m: [] }; lsSet('voz_chat', CHAT); pintar(''); estado('Toca y habla'); }
@@ -1000,8 +957,8 @@ function pintarHist() {
   $('histList').innerHTML = h.map(function (x) { var d = new Date(x.f); return '<div class="fila"><div class="n">' + esc(x.t) + '</div><div class="s">' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + '</div></div>'; }).join('');
 }
 var EJEMPLOS = ['Recuérdame llamar a Clima Norte el martes a las 10 por la cotización 41022', 'Precio bomba de vacío 5 CFM para Frío Sur',
-  'Stock de R410A', 'Teléfono de Refritec', 'Cotizaciones de Aire Total', 'Visité a Termoandes, quieren 20 bombas para octubre', 'Qué tengo hoy',
-  'Ya llamé a Clima Norte'];
+  'Stock de R410A', 'Teléfono de Refritec', 'Llamé a Clima Norte y quedó en enviar la orden', 'Qué hablé con Refritec', 'Últimas facturas de Frío Sur', 'Cómo voy respecto al año pasado',
+  'Cuántas cotizaciones he vendido este mes', 'Qué tengo hoy', 'Ya llamé a Clima Norte'];
 function mostrarSetup() { $('setup').style.display = 'block'; $('app').classList.add('oculto'); }
 
 function iniciar() {

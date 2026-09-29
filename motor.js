@@ -18,14 +18,14 @@
  */
 (function (raiz) {
   'use strict';
-  var M = { version: '2026-09-25' };
+  var M = { version: '2026-09-29' };
 
   // ------------------------------------------------------------------ utilidades
   M.norm = function (s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\/:.,]+/g, ' ').replace(/\s+/g, ' ').trim(); };
   // Igual que _vozNorm_ de la API: la busqueda de productos da lo mismo aca que alla.
   M.normP = function (s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9ñ\/.,]+/g, ' ').replace(/\s+/g, ' ').trim(); };
   M.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-  M.pesos = function (n) { return n == null ? 'sin precio' : '$' + Math.round(n).toLocaleString('es-CL'); };
+  M.pesos = function (n) { return n == null ? 'sin precio' : (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-CL'); };
   M.iso = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
   M.hoy0 = function () { var d = new Date(); d.setHours(0, 0, 0, 0); return d; };
   M.capital = function (s) { s = String(s || '').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
@@ -46,7 +46,7 @@
 
   // ------------------------------------------------------------------ fechas y horas dichas
   M.leerFecha = function (f) {
-    var t = ' ' + M.norm(f) + ' ', d = null, hora = '', usado = [];
+    var t = ' ' + M.norm(f).replace(/[,;.]+(?= |$)/g, '') + ' ', d = null, hora = '', usado = [];
     function quita(rx) { var m = t.match(rx); if (m) { usado.push(m[0].trim()); t = t.replace(rx, ' '); } return m; }
     var h0 = M.hoy0(), m;
     if (quita(/ (en|por|de) la manana /)) hora = '09:00';
@@ -59,7 +59,10 @@
       else if (!q && hh >= 1 && hh <= 7) hh += 12;          // "a las 3" en horario de oficina es la tarde
       hora = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
     } else if ((m = quita(/ (\d{1,2}):(\d{2}) /))) hora = ('0' + m[1]).slice(-2) + ':' + m[2];
-    if (quita(/ pasado manana /)) { d = new Date(h0); d.setDate(d.getDate() + 2); }
+    if (quita(/ (antes de ayer|anteayer|antier) /)) { d = new Date(h0); d.setDate(d.getDate() - 2); }
+    else if (quita(/ ayer /)) { d = new Date(h0); d.setDate(d.getDate() - 1); }
+    else if ((m = quita(/ (?:el )?(lunes|martes|miercoles|jueves|viernes|sabado|domingo) pasado /))) { d = new Date(h0); d.setDate(d.getDate() - (((d.getDay() - DIAS.indexOf(m[1])) + 7) % 7 || 7)); }
+    else if (quita(/ pasado manana /)) { d = new Date(h0); d.setDate(d.getDate() + 2); }
     else if (quita(/ manana /)) { d = new Date(h0); d.setDate(d.getDate() + 1); }
     else if (quita(/ hoy /)) d = new Date(h0);
     else if ((m = quita(/ en (\w+) (dia|dias|semana|semanas|mes|meses) /))) {
@@ -95,6 +98,12 @@
     riesgo: /\b(clientes? (en riesgo|sin compras?|que no (me |nos )?(compran?|han comprado)|perdidos?|dormidos?|inactivos?|que dejaron de comprar)|quien(es)? no (me |nos )?(ha |han )?compra\w*|a quien(es)? (tengo que |debo |deberia )?(visitar|llamar|contactar)|que clientes (visito|llamo|debo visitar)|no me han comprado|dejaron de comprar)\b/,
     mejores: /\b(mejores clientes|quien(es)? (me )?(ha |han )?comprado mas|top (de )?clientes|clientes que mas (me )?compran|mayores clientes|clientes mas grandes|quien compra mas)\b/,
     meta: /\b(mi meta|cual es (mi|la) meta|meta del mes|cuanto (me |nos )?falta (para|por) (la meta|vender|cumplir|llegar|facturar)|cuanto (me|nos) falta|como (voy|vamos) con la meta|avance de (la )?meta|(estoy|estamos|vamos a) (cumpliendo|llegando|llegar)|voy a llegar|cumpliendo la meta)\b/,
+    // 28-09-2026 (Humberto: "agrega todas, parte por las gestiones"): gestiones, cotizaciones vendidas/perdidas, ano anterior, facturas y notas de credito
+    gestion: /\b((registra\w*|anota\w*|agrega\w*|guarda\w*|ingresa\w*|deja\w*|crea\w*|nueva) (una |la |otra |nueva )?gestion|^ gestion (con|de|para) )\b/,
+    gestiones: /\b(gestion(es)? (con|de|del|para|a|al|registrad\w*|hech\w*|anterior\w*|ultim\w*|de hoy|de ayer|de esta semana|del mes|de la semana|de este mes|hoy|esta semana|este mes)|(ultima|ultimo) (gestion|contacto|llamado|visita|conversacion|reunion)|(que|cuando|cuantas|cuantos|dime las|dame las|mis|las) gestion\w*|que (hable|hablamos|converse|conversamos|acorde|acordamos|quedamos) con|en que (quede|quedamos|quedo) con|que le dije a|cuando (fue la ultima vez que |fue que )?(hable|contacte|converse|visite|llame|me reuni)\w* (con|a)|a quien(es)? (contacte|llame|visite|he contactado|he llamado|he visitado|contactamos)|(cuantos|que) clientes (contacte|llame|visite|he contactado|contactamos)|historial (de gestiones|de contactos?|de seguimiento)|seguimiento (de|con|del|a)|que paso con|como (voy|vamos|va|quede|quedamos) con)\b/,
+    cotvend: /\b(cotizaciones? (vendid\w*|perdid\w*|ganad\w*|cerrad\w*|nulas?|anulad\w*|emitid\w*|del (ano|mes)|de este (ano|mes)|(este|en el) (ano|mes)|historic\w*|anterior\w*|viej\w*|pasad\w*|que (se )?(vendi\w*|perdi\w*|gan\w*|cerr\w*)|que (le |les )?(hice|hicimos|he hecho|hemos hecho))|(cuantas|que) cotizaciones|tasa de (cierre|conversion|exito|efectividad)|efectividad|cuanto (he |hemos |llevo |llevamos |se ha |tengo )?cotiz\w*|historial de cotizaciones|cotizado (este|en el|del) (ano|mes)|(vendidas|perdidas) (este|en el|del) (mes|ano)|cuantas (he |hemos )?(vendido|perdido|ganado|cerrado))\b/,
+    comparar: /\b((comparad\w*|comparativ\w*|comparar|compara|versus|vs|respecto|frente|contra) (a |al |el |con el |del |de |con )?(ano|mismo)|ano (pasado|anterior)|(mismo|misma) (periodo|fecha|mes) del ano|como (voy|vamos|estamos|estoy|va|van) (respecto|comparado|versus|frente|contra)|crecimos|crecimiento|crecido|creciendo|caimos|caida de ventas|a esta (fecha|altura) del ano|(mas|menos|mejor|peor) que el ano)\b/,
+    docs: /\b(((ultimas?|que|cuantas|las|mis|dame las|dime las) )?(facturas?|notas? de credito|boletas?) (de|del|a|al|para|tiene|hay|hice|emiti|emitimos|se emitieron|hoy|de hoy|de ayer|esta semana|de esta semana|de la semana|le (hice|hicimos|emiti))|notas? de credito|(ultima|que|cuantas) (facturas?|boletas?)|documentos? (de venta|del cliente|de|del|emitidos) |factura (numero |n |nro |no |num )?\d{3,}|que (facture|facturamos|emitimos|hemos facturado|he facturado|se facturo) (hoy|ayer|esta semana)|que le (facture|facturamos|hemos facturado|he facturado))\b/,
     stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
     precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
     visita: /\b(visite|visitamos|estuve (con|en|donde)|fui (a|donde)|pase (a|por|donde)|me reuni|reunion con)\b/,
@@ -126,7 +135,12 @@
     if (R.hecha.test(n)) return 'hecha';
     if (R.pend.test(n)) return 'pend';
     if (R.meta.test(n)) return 'meta';
+    if (R.gestion.test(n) || M.esPasado(t)) return 'gestion';
+    if (R.cotvend.test(n)) return 'cotvend';
+    if (R.comparar.test(n)) return 'comparar';
+    if (R.docs.test(n)) return 'docs';
     if (R.riesgo.test(n)) return 'riesgo';
+    if (R.gestiones.test(n)) return 'gestiones';
     if (R.mejores.test(n)) return 'mejores';
     if (R.compras.test(n)) return 'compras';
     if (R.ventas.test(n)) return 'ventas';
@@ -173,7 +187,8 @@
   var SUF = ' ltda limitada spa sa s.a eirl e.i.r.l sociedad soc cia y e hijos el la los las de del al en con por para un una ';
   // Palabras de la orden que no son parte de un nombre de cliente ("tengo" casi calzaba con "Rengo").
   var STOP_Q = ' tengo tienes tiene tenemos que cuando como donde quien cual hora dia llamar llamarlo llamarla llamarle llamo llame llama hablar visitar visite enviar mandar precio precios stock telefono fono correo direccion cotizacion cotizaciones recuerdame recordatorio tarea nota anota manana hoy pasado semana mes para por con del las los una uno dos tres cuatro cinco seis siete ocho nueve diez cliente empresa datos ficha contacto marca marcar hecha hecho lista mejor sobre '
-    + 'ese esa eso esto este esta estos estas aquel aquella puedes podrias quiero necesito quisiera guardar guardame agregar agregame crear creame registrar poner ponme favor recordar recordarme avisame hola gracias buenas buenos dias tardes noches busca buscar buscame dame dime muestrame aviso alarma pendiente pendientes ';
+    + 'ese esa eso esto este esta estos estas aquel aquella puedes podrias quiero necesito quisiera guardar guardame agregar agregame crear creame registrar poner ponme favor recordar recordarme avisame hola gracias buenas buenos dias tardes noches busca buscar buscame dame dime muestrame aviso alarma pendiente pendientes '
+    + 'gestion gestiones registra registrar registrame llame hable converse conversamos hablamos visite estuve fui reuni contacte cotice escribi mande envie quedo quedamos quede acordamos acorde ayer anteayer facturas factura facture facturamos notas credito documentos documento boleta vendidas perdidas ganadas cerradas abiertas comparado comparar versus anterior ultima ultimo ultimas ultimos historial seguimiento hice hicimos paso whatsapp mail tasa cierre cuantas cuantos cuanto cotizado cotizamos emitidas ano respecto ';
   function tokensCli(n) { return M.norm(n).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 2 && SUF.indexOf(' ' + w + ' ') < 0; }); }
   M.tokensCli = tokensCli;
   function parecido(a, b) {
@@ -228,7 +243,7 @@
 
   // ------------------------------------------------------------------ copia de datos (accion "datos" de la API)
   var STOP_P = ' de del la el los las un una para por con y a al en que precio precios cuanto cuesta sale vale valor stock hay tenemos quedan dame dime el la me ';
-  M.Datos = function () { this.t = 0; this.hora = ''; this.dolar = 0; this.listas = {}; this.cols = ['PrecioBase', 'LAP', 'LAA', 'L2A', 'L2B', 'L2C', 'L2M']; this.reglas = { vig: 5, cal: 14 }; this.prod = []; this.cliMap = {}; this.cli = []; this.cot = []; this.tareas = []; };
+  M.Datos = function () { this.t = 0; this.hora = ''; this.dolar = 0; this.listas = {}; this.cols = ['PrecioBase', 'LAP', 'LAA', 'L2A', 'L2B', 'L2C', 'L2M']; this.reglas = { vig: 5, cal: 14 }; this.prod = []; this.cliMap = {}; this.cli = []; this.cot = []; this.tareas = []; this.gest = []; this.vend = {}; this.cod = ''; this.todos = false; };
   M.Datos.prototype.usar = function (o, t) {
     this.t = t || Date.now(); this.hora = o.hora || ''; this.dolar = o.dolar || 0; this.listas = o.listas || {}; this.cols = o.listaCols || this.cols; this.reglas = o.reglas || this.reglas;
     this.prod = (o.prod || []).map(function (p) {
@@ -236,15 +251,20 @@
       return { cod: p[0], desc: p[1], act: !!(p[2] & 1), conPrecio: !!(p[2] & 2), stock: p[3] || 0, bod: p[4] || [], pr: p[5] || 0, _t: txt, _c: txt.replace(/[\s\-\/.]/g, ''), _cod: M.normP(p[0]) };
     });
     var map = {}; this.cli = [];
-    (o.cli || []).forEach(function (c) { if (!map[c[0]]) map[c[0]] = { r: c[0], n: c[1], l: c[2], f: c[3], m: c[4], d: c[5], c: c[6], b: !!c[7] }; });
+    (o.cli || []).forEach(function (c) { if (!map[c[0]]) map[c[0]] = { r: c[0], n: c[1], l: c[2], f: c[3], m: c[4], d: c[5], c: c[6], b: !!c[7], v: c[8] || '' }; });
     this.cliMap = map; this.cli = Object.keys(map).map(function (r) { return map[r]; });
     this.cot = o.cot || []; this.cotLineas = o.cotLineas || []; this.tareas = o.tareas || [];
+    // Gestiones del ultimo ano (mas nuevas primero). Las recien dichas por voz que aun van en camino (folio prov-) se conservan.
+    var prov = (this.gest || []).filter(function (g) { return /^prov-/.test(g.folio || ''); });
+    this.gest = prov.concat((o.gest || []).map(function (g) { return { f: g[0], rut: g[1], n: g[2], tipo: g[3], met: g[4], cot: g[5], contacto: g[6], com: g[7], vc: g[8], folio: g[9] }; }));
+    this.vend = o.vend || {}; this.cod = o.cod || ''; this.todos = !!o.todos; this.gestProd = !!o.gestProd;
     return this;
   };
   M.Datos.prototype.usarVentas = function (v, t) {
-    this.ventas = v || null; this.ventasT = t || Date.now(); this.compras = {};
+    this.ventas = v || null; this.ventasT = t || Date.now(); this.compras = {}; this.ventasViejas = !!v && !v.cot;   // copia guardada por una version anterior: se vuelve a pedir
     var self = this, hoy = M.hoy0();
-    ((v && v.clientes) || []).forEach(function (c) { self.compras[c[0]] = { rut: c[0], vc: c[1], mes: c[2], anio: c[3], ult: c[4], dias: c[4] ? Math.round((hoy.getTime() - M.diasFecha(c[4]).getTime()) / 86400000) : null, prods: c[5] || [], docs: c[6] || 0 }; });
+    ((v && v.clientes) || []).forEach(function (c) { self.compras[c[0]] = { rut: c[0], vc: c[1], mes: c[2], anio: c[3], ult: c[4], dias: c[4] ? Math.round((hoy.getTime() - M.diasFecha(c[4]).getTime()) / 86400000) : null, prods: c[5] || [], docs: c[6] || 0, ytdP: c[7] || 0,
+      docsL: (c[8] || []).map(function (d) { return { folio: d[0], tipo: d[1], f: d[2], monto: d[3] }; }), cots: (c[9] || []).map(function (q) { return { folio: q[0], f: q[1], e: q[2], monto: q[3] }; }) }; });
   };
   M.diasFecha = function (iso) { var p = String(iso).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
   // Un cliente puede tener varias cuentas (ruts) con el mismo nombre en el ERP: si la elegida no tiene compras, se mira otra con el mismo nombre.
@@ -374,6 +394,251 @@
     return { ok: true, local: true, cliente: { rut: rut, nombre: c.n, lista: this.listas[c.l] || c.l, listaCod: c.l, fono: c.f, mail: c.m, dir: c.d, comuna: c.c, bloqueado: c.b }, cotizaciones: cots, reglas: this.reglas };
   };
 
+
+  // ------------------------------------------------------------------ gestiones, cotizaciones historicas, ano anterior y documentos (28-09-2026)
+  /* Humberto: "agrega todas, parte por las gestiones". Las gestiones vienen con la copia (accion "datos": las del ultimo ano,
+     solo las propias); las cotizaciones por estado, el ano anterior y los documentos, con la accion "ventas". */
+  M.rango = function (periodo) {
+    var d = M.hoy0(), h = M.iso(d);
+    if (periodo === 'ayer') { d.setDate(d.getDate() - 1); return { desde: M.iso(d), hasta: M.iso(d) }; }
+    if (periodo === 'semana') d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); else if (periodo === 'mes') d.setDate(1);
+    return { desde: M.iso(d), hasta: h };
+  };
+  M.periodoDe = function (n) { return / (hoy|de hoy) /.test(n) ? 'hoy' : / ayer /.test(n) ? 'ayer' : / (esta |la |de la |de esta )?semana /.test(n) ? 'semana' : / (este |el |del |de este )?mes /.test(n) ? 'mes' : ''; };
+  M.periodoTxt = { hoy: 'hoy', ayer: 'ayer', semana: 'esta semana', mes: 'este mes' };
+  M.haceTxt = function (isoS) {
+    var d = M.diasHasta(isoS); if (d == null) return '';
+    if (d === 0) return 'hoy'; if (d === -1) return 'ayer'; if (d < 0 && d >= -60) return 'hace ' + (-d) + ' días';
+    var p = String(isoS).split('-'); return 'el ' + (+p[2]) + ' de ' + MESES[+p[1] - 1];
+  };
+  // Como se dice una gestion: "llamado", "WhatsApp", "visita", "cotización por correo"
+  M.gestTxt = function (tipo, met) {
+    var t = M.norm(tipo), m = M.norm(met);
+    var via = /telef|llam/.test(m) ? 'por teléfono' : /whats/.test(m) ? 'por WhatsApp' : /mail|correo/.test(m) ? 'por correo' : /refrichile/.test(m) ? 'en Refrichile' : /presencial/.test(m) ? 'en terreno' : '';
+    var que = { contacto: '', contactado: '', llamado: 'llamado', whatsapp: 'WhatsApp', correo: 'correo', cotizacion: 'cotización', cotizado: 'cotización', 'seguimiento cotizacion': 'seguimiento de cotización', 'toma de pedido': 'toma de pedido',
+      reunion: 'reunión', visita: 'visita', postventa: 'postventa', cobranza: 'cobranza', prospeccion: 'prospección', facturado: 'facturación' }[t];
+    if (que == null) que = tipo ? String(tipo).toLowerCase() : '';
+    if (que === 'reunión' && via === 'en terreno') return 'visita';
+    if (!que) return via === 'por teléfono' ? 'llamado' : via === 'por WhatsApp' ? 'WhatsApp' : via === 'por correo' ? 'correo' : via === 'en terreno' ? 'visita' : via === 'en Refrichile' ? 'atención en Refrichile' : 'contacto';
+    if ((que === 'llamado' && via === 'por teléfono') || (que === 'WhatsApp' && via === 'por WhatsApp') || (que === 'correo' && via === 'por correo') || que === 'visita') via = '';
+    return que + (via ? ' ' + via : '');
+  };
+  M.Datos.prototype.gestionesDe = function (rut) {
+    var c = this.cliMap[rut], n = c ? M.tokensCli(c.n).join(' ') : '';
+    return (this.gest || []).filter(function (g) { return g.rut === rut || (n && !g.rut && M.tokensCli(g.n).join(' ') === n); });
+  };
+  M.Datos.prototype.gestionesPeriodo = function (periodo) { var r = M.rango(periodo || 'hoy'); return (this.gest || []).filter(function (g) { return g.f >= r.desde && g.f <= r.hasta; }); };
+  M.Datos.prototype.cotHist = function (rut) { var c = this.comprasDe(rut); return c ? c.cots || [] : []; };
+  M.Datos.prototype.docsDe = function (rut) { var c = this.comprasDe(rut); return c ? c.docsL || [] : []; };
+  M.Datos.prototype.docsPeriodo = function (periodo) {
+    var r = M.rango(periodo === 'hoy' || periodo === 'ayer' ? periodo : 'semana'), self = this;
+    return ((this.ventas && this.ventas.docsSem) || []).filter(function (d) { return d[2] >= r.desde && d[2] <= r.hasta; })
+      .map(function (d) { return { folio: d[0], tipo: d[1], f: d[2], rut: d[3], nombre: (self.cliMap[d[3]] || {}).n || '', monto: d[4] }; });
+  };
+  M.Datos.prototype.docPorFolio = function (folio) {
+    var self = this, out = null; folio = String(folio);
+    Object.keys(this.compras || {}).some(function (r) { var d = (self.compras[r].docsL || []).filter(function (x) { return x.folio === folio; })[0]; if (d) out = { folio: d.folio, tipo: d.tipo, f: d.f, monto: d.monto, rut: r, nombre: (self.cliMap[r] || {}).n || '' }; return !!d; });
+    return out;
+  };
+  M.gestionesTxt = function (nombre, lista) {
+    if (!lista.length) return 'No tienes gestiones registradas con ' + nombre + ' en el último año.';
+    function una(g) { return M.haceTxt(g.f) + ', ' + M.gestTxt(g.tipo, g.met) + (g.cot ? ' por la cotización ' + g.cot : '') + (g.com ? ': ' + g.com.replace(/[.\s]+$/, '') : ''); }
+    return 'Con ' + nombre + ' tienes ' + lista.length + (lista.length === 1 ? ' gestión' : ' gestiones') + ' en el último año. La última, ' + una(lista[0]) + '.' + (lista.length > 1 ? ' Antes, ' + una(lista[1]) + '.' : '');
+  };
+  M.gestPeriodoTxt = function (periodo, lista, equipo) {
+    var per = M.periodoTxt[periodo] || 'hoy';
+    if (!lista.length) return M.capital(per) + (equipo ? ' el equipo no tiene' : ' no tienes') + ' gestiones registradas.';
+    var porCli = {}, orden = []; lista.forEach(function (g) { var k = g.n || g.rut; if (!porCli[k]) { porCli[k] = g; orden.push(k); } });
+    return M.capital(per) + (equipo ? ' el equipo lleva ' : ' llevas ') + lista.length + (lista.length === 1 ? ' gestión' : ' gestiones') + ' con ' + orden.length + (orden.length === 1 ? ' cliente' : ' clientes') + ': '
+      + orden.slice(0, 4).map(function (k) { return k + ' (' + M.gestTxt(porCli[k].tipo, porCli[k].met) + ')'; }).join('; ') + (orden.length > 4 ? '; y ' + (orden.length - 4) + ' más' : '') + '.';
+  };
+  function cuantas(k, s, p) { return k + ' ' + (k === 1 ? s : p); }
+  M.cotHistTxt = function (v, periodo) {
+    if (!v || !v.cot) return 'Todavía no tengo las cotizaciones.';
+    var c = v.cot[periodo === 'anio' ? 'anio' : 'mes'] || [], tot = (c[0] || 0) + (c[2] || 0) + (c[4] || 0), cerr = (c[2] || 0) + (c[4] || 0), per = periodo === 'anio' ? 'Este año' : 'Este mes';
+    if (!tot) return per + ' no hay cotizaciones emitidas.';
+    return per + (v.equipo ? ' el equipo emitió ' : ' emitiste ') + cuantas(tot, 'cotización', 'cotizaciones') + ' por ' + M.plataTxt(c[1] + c[3] + c[5]) + ': ' + cuantas(c[2], 'vendida', 'vendidas') + (c[2] ? ' por ' + M.plataTxt(c[3]) : '') + ', '
+      + cuantas(c[4], 'perdida', 'perdidas') + (c[4] ? ' por ' + M.plataTxt(c[5]) : '') + ' y ' + cuantas(c[0], 'abierta', 'abiertas') + (c[0] ? ' por ' + M.plataTxt(c[1]) : '') + '.' + (cerr ? ' De las cerradas, se vendió el ' + Math.round(c[2] / cerr * 100) + ' por ciento.' : '');
+  };
+  var EST_TXT = { P: 'abierta', V: 'vendida', X: 'perdida', N: 'nula', O: 'en otro estado' };
+  M.cotHistCliTxt = function (nombre, cots) {
+    if (!cots.length) return nombre + ' no tiene cotizaciones este año.';
+    var n = { P: 0, V: 0, X: 0, N: 0, O: 0 }, m = { P: 0, V: 0, X: 0, N: 0, O: 0 }; cots.forEach(function (q) { n[q.e] = (n[q.e] || 0) + 1; m[q.e] = (m[q.e] || 0) + q.monto; });
+    var partes = []; if (n.V) partes.push(cuantas(n.V, 'vendida', 'vendidas') + ' por ' + M.plataTxt(m.V)); if (n.X) partes.push(cuantas(n.X, 'perdida', 'perdidas') + ' por ' + M.plataTxt(m.X)); if (n.P) partes.push(cuantas(n.P, 'abierta', 'abiertas') + ' por ' + M.plataTxt(m.P)); if (n.N) partes.push(cuantas(n.N, 'nula', 'nulas'));
+    var u = cots[0];
+    return nombre + ' tiene ' + (cots.length >= 10 ? 'al menos ' : '') + cuantas(cots.length, 'cotización', 'cotizaciones') + ' este año: ' + partes.join(', ') + '. La última, la ' + u.folio + ' de ' + M.haceTxt(u.f) + ', ' + (EST_TXT[u.e] || '') + ' por ' + M.plataTxt(u.monto) + '.';
+  };
+  M.variaTxt = function (a, p) {
+    if (!p) return a ? 'y el año pasado a esta fecha no había ventas' : '';
+    var x = Math.round((a - p) / Math.abs(p) * 100);
+    return x === 0 ? 'igual que el año pasado' : Math.abs(x) + ' por ciento ' + (x > 0 ? 'más' : 'menos') + ' que el año pasado';
+  };
+  M.comparaTxt = function (v) {
+    if (!v || v.ytdP == null) return 'Todavía no tengo las ventas del año anterior.';
+    return 'A esta fecha ' + (v.equipo ? 'el equipo lleva ' : 'llevas ') + M.plataTxt(v.anio) + ' en el año, ' + M.variaTxt(v.anio, v.ytdP) + (v.ytdP ? ', que iba en ' + M.plataTxt(v.ytdP) : '') + '. En el mes, ' + M.plataTxt(v.mes) + ', '
+      + M.variaTxt(v.mes, v.mesP) + (v.mesP ? ' al mismo día, que iba en ' + M.plataTxt(v.mesP) : '') + '.' + (v.anioP ? ' El año pasado completo cerró en ' + M.plataTxt(v.anioP) + '.' : '');
+  };
+  M.comparaCliTxt = function (nombre, c) {
+    if (!c || (!c.anio && !c.ytdP)) return nombre + ' no tiene compras este año ni el anterior a esta fecha.';
+    return nombre + ' lleva ' + M.plataTxt(c.anio) + ' este año, ' + M.variaTxt(c.anio, c.ytdP) + (c.ytdP ? ', que a esta fecha iba en ' + M.plataTxt(c.ytdP) : '') + '.';
+  };
+  function docTxt(d) { return (d.tipo === 'N' ? 'nota de crédito ' : 'factura ') + d.folio + ' de ' + M.haceTxt(d.f) + (d.nombre ? ' a ' + d.nombre : '') + ' por ' + M.plataTxt(Math.abs(d.monto)); }
+  M.docsTxt = function (nombre, docs) {
+    if (!docs.length) return nombre + ' no tiene facturas ni notas de crédito desde el año pasado.';
+    var nc = docs.filter(function (d) { return d.tipo === 'N'; }).length;
+    return 'Los últimos documentos de ' + nombre + ': ' + docs.slice(0, 3).map(docTxt).join('; ') + '.' + (docs.length > 3 ? ' Y ' + (docs.length - 3) + ' más' + (nc ? ', con ' + cuantas(nc, 'nota de crédito', 'notas de crédito') + ' en total' : '') + '.' : '');
+  };
+  M.docsPeriodoTxt = function (periodo, docs, equipo) {
+    var per = M.periodoTxt[periodo === 'hoy' || periodo === 'ayer' ? periodo : 'semana'];
+    if (!docs.length) return M.capital(per) + ' no hay documentos emitidos' + (equipo ? '' : ' a tu cartera') + '.';
+    var tot = 0; docs.forEach(function (d) { tot += d.monto; });
+    return M.capital(per) + (docs.length === 1 ? ' va ' : ' van ') + cuantas(docs.length, 'documento', 'documentos') + ' por ' + M.plataTxt(tot) + ': ' + docs.slice(0, 3).map(docTxt).join('; ') + (docs.length > 3 ? '; y ' + (docs.length - 3) + ' más' : '') + '.';
+  };
+  M.docFolioTxt = function (d, folio) { return d ? M.capital(docTxt(d)) + '.' : 'No tengo el documento ' + folio + ' entre los últimos de tu cartera.'; };
+
+  /* Lo que se MUESTRA de una consulta de gestiones, cotizaciones, ano anterior o documentos, sin pantalla: titulo, filas
+     {n, s, v, vs, rut} y lo que se dice. Cada pantalla (la app, la consulta del CRM) lo pinta con sus propios estilos. */
+  M.GEST_TIPOS = ['Contacto', 'Cotización', 'Seguimiento cotización', 'Toma de pedido', 'Reunión', 'Postventa', 'Cobranza', 'Prospección', 'Otro'];
+  M.GEST_METODOS = ['Teléfono', 'WhatsApp', 'Email', 'Presencial en cliente', 'Presencial en Refrichile'];
+  M.vista = function (r, datos) {
+    var v = datos.ventas || {}, P = M.pesos, o = { titulo: '', etiqueta: '', nombre: r.cli ? r.cli.n : '', filas: [], nota: '', dicho: '' };
+    function pct(a, p) { if (!p) return '—'; var x = Math.round((a - p) / Math.abs(p) * 100); return (x > 0 ? '+' : '') + x + '%'; }
+    if (r.tipo === 'gestiones') {
+      var gs = r.cli ? datos.gestionesDe(r.cli.r) : datos.gestionesPeriodo(r.periodo);
+      o.titulo = 'Gestiones' + (r.cli ? '' : ' de ' + (M.periodoTxt[r.periodo] || 'hoy')) + ' · ' + gs.length;
+      o.filas = gs.slice(0, 8).map(function (g) {
+        var que = M.capital(M.gestTxt(g.tipo, g.met)) + (g.cot ? ' · cot. ' + g.cot : '');
+        return { n: r.cli ? que : (g.n || g.rut), s: (r.cli ? '' : que + ' · ') + (g.com || 'sin comentario'), v: M.capital(M.haceTxt(g.f)), vs: /^prov-/.test(g.folio || '') ? 'enviando' : (g.contacto || (datos.todos ? g.vc : '')), rut: g.rut };
+      });
+      if (!gs.length) o.nota = 'Sin gestiones registradas.';
+      o.dicho = r.cli ? M.gestionesTxt(r.cli.n, gs) : M.gestPeriodoTxt(r.periodo, gs, datos.todos);
+    } else if (r.tipo === 'cotvend') {
+      if (r.cli) {
+        var cs = datos.cotHist(r.cli.r); o.titulo = 'Cotizaciones del año · ' + cs.length;
+        o.filas = cs.map(function (q) { return { n: 'N° ' + q.folio, s: M.capital(M.haceTxt(q.f)), v: P(q.monto), vs: EST_TXT[q.e] || '' }; });
+        if (!cs.length) o.nota = 'Sin cotizaciones este año.'; o.dicho = M.cotHistCliTxt(r.cli.n, cs);
+      } else {
+        var c = (v.cot || {})[r.periodo === 'anio' ? 'anio' : 'mes'] || [0, 0, 0, 0, 0, 0, 0, 0], cerr = c[2] + c[4];
+        o.titulo = 'Cotizaciones ' + (r.periodo === 'anio' ? 'del año' : 'del mes'); o.etiqueta = v.equipo ? 'Equipo' : '';
+        o.filas = [{ n: 'Vendidas', s: c[2] + ' cotizaciones', v: P(c[3]) }, { n: 'Perdidas', s: c[4] + ' cotizaciones', v: P(c[5]) }, { n: 'Abiertas', s: c[0] + ' cotizaciones', v: P(c[1]) },
+          { n: 'Tasa de cierre', s: 'vendidas sobre cerradas', v: cerr ? Math.round(c[2] / cerr * 100) + '%' : '—' }];
+        if (c[6]) o.nota = cuantas(c[6], 'nula', 'nulas') + ' por ' + P(c[7]) + '.'; o.dicho = M.cotHistTxt(datos.ventas, r.periodo);
+      }
+    } else if (r.tipo === 'comparar') {
+      if (r.cli) {
+        var cc = datos.comprasDe(r.cli.r) || { anio: 0, ytdP: 0 }; o.titulo = 'Contra el año pasado';
+        o.filas = [{ n: 'Este año', s: 'a la fecha', v: P(cc.anio) }, { n: 'Año pasado', s: 'a la misma fecha', v: P(cc.ytdP), vs: pct(cc.anio, cc.ytdP) }]; o.dicho = M.comparaCliTxt(r.cli.n, cc);
+      } else {
+        o.titulo = 'Contra el año pasado'; o.etiqueta = v.equipo ? 'Equipo' : '';
+        o.filas = [{ n: 'Año a la fecha', s: 'este año', v: P(v.anio) }, { n: 'Año pasado', s: 'a la misma fecha', v: P(v.ytdP), vs: pct(v.anio, v.ytdP) }, { n: 'Mes al día', s: 'este año', v: P(v.mes) },
+          { n: 'Mismo mes, año pasado', s: 'al mismo día', v: P(v.mesP), vs: pct(v.mes, v.mesP) }, { n: 'Año pasado completo', s: '', v: P(v.anioP) }];
+        if (v.equipo && v.vendedores) v.vendedores.forEach(function (x) { o.filas.push({ n: x.nombre, s: 'año a la fecha contra el anterior', v: P(x.anio), vs: pct(x.anio, x.ytdP) }); });
+        o.dicho = M.comparaTxt(datos.ventas);
+      }
+    } else if (r.tipo === 'docs') {
+      var ds = r.cli ? datos.docsDe(r.cli.r) : r.folio ? [datos.docPorFolio(r.folio)].filter(Boolean) : datos.docsPeriodo(r.periodo);
+      o.titulo = (r.cli || r.folio ? 'Documentos' : 'Documentos de ' + M.periodoTxt[r.periodo === 'hoy' || r.periodo === 'ayer' ? r.periodo : 'semana']) + ' · ' + ds.length;
+      o.filas = ds.slice(0, 10).map(function (d) { return { n: (d.tipo === 'N' ? 'Nota de crédito ' : 'Factura ') + d.folio, s: (d.nombre ? d.nombre + ' · ' : '') + M.capital(M.haceTxt(d.f)), v: P(d.monto), vs: 'neto', rut: d.rut }; });
+      if (!ds.length) o.nota = 'Sin documentos.';
+      o.dicho = r.cli ? M.docsTxt(r.cli.n, ds) : r.folio ? M.docFolioTxt(ds[0], r.folio) : M.docsPeriodoTxt(r.periodo, ds, datos.todos);
+    }
+    return o;
+  };
+
+  // ------------------------------------------------------------------ registrar una gestion
+  // "llamé a X", "visité a X": contar algo que ya se hizo con un cliente. Chrome escribe la tilde; sin tilde "llame a X" es llamar ahora.
+  M.esPasado = function (t) {
+    return /^\s*(ayer|anteayer|hoy|reci[eé]n|bueno|listo)?[,\s]*(le|la|lo|les|me)?\s*(llam[eé]|habl[eé]|convers[eé]|contact[eé]|visit[eé]|reun[ií]|escrib[ií]|mand[eé]|envi[eé]|cotic[eé]|pas[eé]|atend[ií]|estuve|fui)(?![a-záéíóúñ])/i.test(String(t || ''))
+      && (/[éí]/.test(String(t).split(/\s+/).slice(0, 4).join(' ')) || /^\s*(ayer |hoy )?(estuve|fui) (con|en|donde|a)\b/i.test(String(t)));
+  };
+  function sinAcentoRx(w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[aeiou]/g, function (c) { return { a: '[aá]', e: '[eé]', i: '[ií]', o: '[oó]', u: '[uúü]' }[c]; }).replace(/n/g, '[nñ]'); }
+  // Saca de la frase el nombre del cliente tal como se dijo (con sus "sociedad", "y", "limitada") y la preposicion que lo trae.
+  function quitarCliente(s, cli) {
+    var toks = cli._t || M.tokensCli(cli.n), todas = M.norm(cli.n).replace(/[.,\-]/g, ' ').split(' ').filter(Boolean), ws = s.trim().split(/\s+/);
+    var info = ws.map(function (w) { var k = M.norm(w).replace(/[.,;:]/g, ''); var tk = !!k && toks.some(function (t) { return parecido(k, t); }); return { nom: tk || (!!k && todas.indexOf(k) >= 0), tk: tk }; });
+    var mejor = null, i = 0;
+    while (i < ws.length) {
+      if (!info[i].nom) { i++; continue; }
+      var j = i, n = 0; while (j < ws.length && info[j].nom) { if (info[j].tk) n++; j++; if (/[,.;:]$/.test(ws[j - 1])) break; }
+      if (n && (!mejor || n > mejor.n)) mejor = { a: i, b: j, n: n };
+      i = j;
+    }
+    if (!mejor) return s;
+    var a = mejor.a;
+    if (a >= 2 && /^(la|el|los)$/i.test(ws[a - 2]) && /^(empresa|cliente|gente)$/i.test(ws[a - 1])) a -= 2; else if (a >= 1 && /^(cliente|empresa)$/i.test(ws[a - 1])) a -= 1;
+    if (a >= 1 && /^(a|al|con|de|del|donde|para|en)$/i.test(ws[a - 1])) a -= 1;
+    var cola = /[,.;:]$/.test(ws[mejor.b - 1]) ? ws[mejor.b - 1].slice(-1) : '';
+    return ' ' + ws.slice(0, a).join(' ') + cola + ' ' + ws.slice(mejor.b).join(' ') + ' ';
+  }
+  // El comentario: lo dicho sin la orden, el cliente, el verbo ni la fecha ("llamé a Clima Norte, quedó en enviar la OC" -> "Quedó en enviar la OC")
+  M.comentarioGestion = function (texto, f, cli) {
+    var s = ' ' + String(texto || '').replace(/\s+/g, ' ').trim() + ' ';
+    s = s.replace(/^\s*(registra\w*|anota\w*|agrega\w*|guarda\w*|ingresa\w*|deja\w*|crea\w*)?\s*(una |la |otra |nueva )*gesti[oó]n\s*(con|de|para|a|al|del)?\s+(el cliente |la empresa |cliente )?/i, ' ');
+    (f.usado || []).forEach(function (u) { s = s.replace(new RegExp(' ' + u.split(' ').map(sinAcentoRx).join(' ') + '(?=[ ,.;:])', 'i'), ' '); });
+    if (cli) s = quitarCliente(s, cli);
+    s = s.replace(/^[\s,.;:]*(ya )?(le |la |lo |les |me )?(llam[eé]|habl[eé]|convers[eé]|contact[eé]|visit[eé]|me reun[ií]|reun[ií]|escrib[ií]|mand[eé]|envi[eé]|cotic[eé]|pas[eé]|atend[ií]|estuve|fui)(?![a-záéíóúñ])\s*(a |al |con |donde |por donde |en |de )?(?![a-záéíóúñ])/i, ' ');
+    s = s.replace(/^[\s,.;:]*(por |v[ií]a |en )(tel[eé]fono|whatsapp|wsp|correo|mail|email)\b/i, ' ');
+    s = s.replace(/^[\s,.;:]*(y|que|pero|donde)\s+/i, ' ').replace(/^[\s,.;:]+/, '').replace(/[\s,;:]+$/, '');
+    s = s.replace(/\s+/g, ' ').trim();
+    return s.length >= 3 ? M.capital(s).slice(0, 300) : '';
+  };
+  M.gestionDe = function (texto, clis) {
+    var raw = String(texto || ''), n = ' ' + M.norm(raw) + ' ', f = M.leerFecha(raw), cot = M.cotizacionDe(raw), cli = (clis || [])[0] || null;
+    var metodo = /\b(whatsapp|wasap|wsp|guasap|por mensaje)\b/.test(n) ? 'WhatsApp'
+      : /\b(correo|mail|email)\b/.test(n) ? 'Email'
+      : /\b(vino|vinieron|paso por (la oficina|refrichile|el local|el meson)|en (la oficina|refrichile|el meson)|retiro en)\b/.test(n) ? 'Presencial en Refrichile'
+      : /\b(visit\w*|estuve|fui|reuni\w*|presencial|en terreno|pase (a|por|donde))\b/.test(n) ? 'Presencial en cliente'
+      : /\b(llam\w*|telefon\w*)\b/.test(n) ? 'Teléfono' : '';
+    var gtipo = /\b(reclamo|garantia|postventa|post venta|falla|devolucion)\b/.test(n) ? 'Postventa'
+      : /\b(cobranza|cobre|le cobre|pago pendiente|factura vencida|facturas vencidas|deuda)\b/.test(n) ? 'Cobranza'
+      : /\b(tom[eo] (el |un |su )?pedido|(me |nos )?hizo (el |un |su )?pedido|(me |nos )?(mando|envio|paso) la (orden|oc)\b|llego la (orden|oc)\b|cerramos|cerre (la venta|el negocio)|confirmo (el |la |su )?(pedido|compra|orden))\b/.test(n) ? 'Toma de pedido'
+      : /\b(cotice|cotizamos|le cotiz\w*|(mande|envie|pase|hice) (la |una |su )?cotizacion)\b/.test(n) ? 'Cotización'
+      : (cot || /\b(seguimiento|(por|sobre|de) la cotizacion)\b/.test(n)) ? 'Seguimiento cotización'
+      : /\b(prospect\w*|cliente nuevo|nuevo cliente|posible cliente)\b/.test(n) ? 'Prospección'
+      : /\b(visit\w*|estuve|fui|reuni\w*|presencial|terreno)\b/.test(n) ? 'Reunión' : 'Contacto';
+    // Una fecha futura no es de una gestion hecha (seria lo que quedo de hacerse): se deja hoy.
+    var fecha = f.iso && M.diasHasta(f.iso) <= 0 ? f.iso : M.iso(M.hoy0());
+    return { tipo: 'gestion', gtipo: gtipo, metodo: metodo, comentario: M.comentarioGestion(raw, f.iso && M.diasHasta(f.iso) <= 0 ? f : { usado: [] }, cli), detalle: raw, fecha: fecha, hora: '', titulo: '', clis: clis || [], cli: cli ? cli.r : '', cot: cot };
+  };
+  // Correcciones dichas sobre una gestion por confirmar: "fue por WhatsApp", "es una visita", "fue ayer", "agrega que...", "sin comentario"
+  M.corregirGestion = function (b, texto, cartera) {
+    var n = ' ' + M.norm(texto) + ' ', cambios = [], f = M.leerFecha(texto), m;
+    if (f.iso && M.diasHasta(f.iso) <= 0 && f.iso !== b.fecha) { b.fecha = f.iso; cambios.push('fecha'); }
+    if ((m = n.match(/ (?:fue|era|es|por|via|como|mejor|ponlo como|ponla como|cambia\w*(?: a)?) (?:una? |por |como |el |la )?(llamad[oa]|telefono|whatsapp|wasap|wsp|correo|mail|email|visita|reunion|presencial|en terreno|cotizacion|seguimiento|pedido|toma de pedido|postventa|cobranza|prospeccion|contacto) /))) {
+      var k = m[1], antes = b.gtipo + '|' + b.metodo;
+      if (/llamad|telefono/.test(k)) b.metodo = 'Teléfono'; else if (/whats|wasap|wsp/.test(k)) b.metodo = 'WhatsApp'; else if (/correo|mail/.test(k)) b.metodo = 'Email';
+      else if (/visita|presencial|terreno/.test(k)) { b.gtipo = 'Reunión'; b.metodo = 'Presencial en cliente'; } else if (k === 'reunion') b.gtipo = 'Reunión';
+      else if (k === 'cotizacion') b.gtipo = 'Cotización'; else if (k === 'seguimiento') b.gtipo = 'Seguimiento cotización'; else if (/pedido/.test(k)) b.gtipo = 'Toma de pedido';
+      else if (k === 'postventa') b.gtipo = 'Postventa'; else if (k === 'cobranza') b.gtipo = 'Cobranza'; else if (k === 'prospeccion') b.gtipo = 'Prospección'; else if (k === 'contacto') b.gtipo = 'Contacto';
+      if (antes !== b.gtipo + '|' + b.metodo) cambios.push('tipo');
+    }
+    if (/ (sin comentario|sin detalle|sin nada|borra el comentario) /.test(n)) { if (b.comentario) { b.comentario = ''; cambios.push('comentario'); } }
+    else if ((m = texto.match(/\b(?:que diga|el comentario es|mejor que diga|comentario:?)\s+(.+)$/i))) { b.comentario = M.capital(m[1]); cambios.push('comentario'); }
+    else if ((m = texto.match(/\b(?:agr[eé]ga(?:le)?|a[nñ][aá]de(?:le)?|an[oó]ta(?:le)?|p[oó]n(?:le)?|suma(?:le)?)\s+(?:tambi[eé]n\s+)?(?:que\s+)?(.+)$/i))) { b.comentario = (b.comentario ? b.comentario.replace(/[.\s]+$/, '') + '. ' : '') + M.capital(m[1]); cambios.push('comentario'); }
+    if (/ (el cliente|cliente es|es con|fue con|es para|es de|a nombre de) /.test(n) && cartera) { var c = cartera.buscar(texto)[0]; if (c && c.r !== b.cli) { b.cli = c.r; cambios.push('cliente'); } }
+    var mc = M.cotizacionDe(texto); if (mc && mc !== b.cot) { b.cot = mc; cambios.push('cotización'); }
+    return cambios;
+  };
+  // Lo que se confirma de viva voz antes de registrar. quien: nombre del vendedor cuando la registra la jefatura a su nombre.
+  M.fraseGestion = function (b, cartera, quien) {
+    var c = cartera && cartera.porRut[b.cli];
+    return 'Gestión con ' + (c ? c.n : 'el cliente') + ': ' + M.gestTxt(b.gtipo, b.metodo) + (b.cot ? ', cotización ' + b.cot : '') + (b.fecha !== M.iso(M.hoy0()) ? ', ' + M.haceTxt(b.fecha) : '')
+      + (b.comentario ? '. Comentario: ' + b.comentario.replace(/[.\s]+$/, '') : ', sin comentario') + (quien ? '. Queda a nombre de ' + quien : '') + '. ¿La registro?';
+  };
+  M.datosGestion = function (b, cartera) {
+    var c = cartera && cartera.porRut[b.cli];
+    return { rid: M.ridNuevo(), rut: b.cli, cliente: c ? c.n : '', tipo: b.gtipo, metodo: b.metodo, comentario: b.comentario || '', fecha: b.fecha, cot: b.cot || '', texto: b.detalle };
+  };
+  // La gestion que corresponde a un pendiente recien cerrado ("Llamar a X por la cotización 41022" -> seguimiento por teléfono)
+  M.gestionDeTarea = function (t, dicho, cli) {
+    var b = M.gestionDe(t.titulo + ' ' + (t.cliente || ''), cli ? [cli] : []), n = ' ' + M.norm(t.titulo) + ' ';
+    if (!b.metodo) b.metodo = / llamar /.test(n) ? 'Teléfono' : / visitar /.test(n) ? 'Presencial en cliente' : / (escribir|enviar|mandar) /.test(n) ? 'Email' : '';
+    if (/ visitar /.test(n)) b.gtipo = 'Reunión';
+    var f0 = M.leerFecha(dicho || ''), com = M.comentarioGestion(String(dicho || '').replace(/^\s*ya\s+/i, ''), { usado: f0.iso && M.diasHasta(f0.iso) <= 0 ? f0.usado : [] }, cli);
+    b.comentario = com || t.titulo; b.detalle = dicho || t.titulo; b.fecha = M.iso(M.hoy0()); b.cli = cli ? cli.r : ''; b.clis = cli ? [cli] : [];
+    return b;
+  };
+
   // ------------------------------------------------------------------ interpretar una frase
   /* Devuelve que hacer, sin hacerlo:
        { tipo:'pend' } | { tipo:'precio'|'stock', q, cli, resultado, consulta }  (resultado null = no esta en la copia)
@@ -389,6 +654,26 @@
     var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
     if (tipo === 'pend') return { tipo: 'pend' };
     if (tipo === 'ventas' || tipo === 'meta') return { tipo: tipo, resultado: datos.ventas || null, periodo: / hoy /.test(n) ? 'hoy' : / (esta |la )?semana /.test(n) ? 'semana' : '' };
+    if (tipo === 'gestion' || tipo === 'visita') {
+      if (!cli) { clis = cartera.buscar(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
+      var bg = M.gestionDe(texto, clis); if (cli && !claro) bg.cli = '';
+      return { tipo: 'borrador', borrador: bg };
+    }
+    if (tipo === 'gestiones' || tipo === 'cotvend' || tipo === 'docs' || tipo === 'comparar') {
+      var per = M.periodoDe(n), folioD = tipo === 'docs' ? ((n.match(/ (?:factura|boleta|documento|nota de credito)(?: numero| n| nro| no| num)? (\d{3,8}) /) || [])[1] || '') : '';
+      if (tipo === 'cotvend') per = / (ano|anual) /.test(n) ? 'anio' : 'mes';
+      // Sin periodo ni folio, la pregunta es por un cliente: se acepta un calce mas suelto y, si hay varios, se pregunta cual.
+      if (!cli && !per && !folioD && tipo !== 'comparar') { clis = cartera.buscar(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
+      if (cli && !claro && (tipo === 'gestiones' || tipo === 'docs') && !per && !folioD) return { tipo: 'elegir', clis: clis, para: tipo };
+      if (cli && !claro) cli = null;
+      if (tipo === 'gestiones') {
+        if (!cli && !per) return { tipo: 'ia', motivo: 'sin cliente' };
+        return { tipo: 'gestiones', cli: cli, periodo: cli ? '' : per, resultado: datos.t ? (cli ? datos.gestionesDe(cli.r) : datos.gestionesPeriodo(per)) : null };
+      }
+      if (tipo === 'cotvend') return { tipo: 'cotvend', cli: cli, periodo: per, resultado: datos.ventas ? (cli ? datos.cotHist(cli.r) : datos.ventas) : null };
+      if (tipo === 'comparar') return { tipo: 'comparar', cli: cli, resultado: datos.ventas ? (cli ? datos.comprasDe(cli.r) : datos.ventas) : null };
+      return { tipo: 'docs', cli: cli, periodo: cli || folioD ? '' : (per || 'semana'), folio: cli ? '' : folioD, resultado: datos.ventas ? (cli ? datos.docsDe(cli.r) : folioD ? datos.docPorFolio(folioD) : datos.docsPeriodo(per || 'semana')) : null };
+    }
     if (tipo === 'riesgo' || tipo === 'mejores') return { tipo: tipo, sub: tipo === 'mejores' ? (/ (ano|anual|este ano) /.test(n) ? 'mejores_anio' : 'mejores_mes') : 'riesgo', resultado: datos.ventas ? datos.cartera(tipo === 'mejores' ? (/ (ano|anual|este ano) /.test(n) ? 'mejores_anio' : 'mejores_mes') : 'riesgo') : null };
     if (tipo === 'compras') {
       if (!cli) { clis = cartera.buscar(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
@@ -417,7 +702,7 @@
       return { tipo: 'ficha', para: tipo, cli: cli, resultado: datos.ficha(cli.r) };
     }
     if (tipo === 'hecha') return { tipo: 'hecha', cli: cli };
-    if (/^(recordatorio|tarea|visita|prosp|nota)$/.test(tipo)) return { tipo: 'borrador', borrador: M.borrador(tipo, texto, clis) };
+    if (/^(recordatorio|tarea|prosp|nota)$/.test(tipo)) return { tipo: 'borrador', borrador: M.borrador(tipo, texto, clis) };
     return { tipo: 'ia', motivo: 'no se entendio' };
   };
 
@@ -486,8 +771,8 @@
     this.fetch = opc.fetch || (typeof fetch === 'function' ? fetch.bind(raiz) : null);
     this.cola = []; this.vuelo = { u: 0, e: 0, f: 0 };
   };
-  M.Api.RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1, ventas: 1 };
-  M.Api.RID = { chat: 1, tarea: 1, hecha: 1 };
+  M.Api.RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1, ventas: 1, gestiones: 1 };
+  M.Api.RID = { chat: 1, tarea: 1, hecha: 1, gestion: 1, gestionBorrar: 1 };
   M.Api.prototype.llamar = function (accion, datos, opc) {
     opc = opc || {}; datos = Object.assign({}, datos || {}); var self = this;
     if (M.Api.RID[accion] && !datos.rid) datos.rid = M.ridNuevo();

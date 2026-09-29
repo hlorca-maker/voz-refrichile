@@ -8,7 +8,7 @@
   var m = location.hash.match(/[#&]t=([A-Za-z0-9_\-]{20,})/);
   if (m) { alm.set('t', m[1]); history.replaceState(null, '', location.pathname + location.search); }
   var api = new M.Api({ url: API, clave: function () { return alm.get('t', ''); }, alSinClave: function () { estado('La clave de acceso no es válida. Pide tu enlace nuevamente.', 'error'); } });
-  var cola = new M.Cola(api, alm, { alListo: function (x, o) { cerebro.colaListo(x, o); }, alFallo: function (x, err) { decir((x.a === 'tarea' ? 'Ojo: no quedó guardado en el CRM: ' : 'Ojo: no se marcó como hecha: ') + x.txt + '. ' + err); } });
+  var cola = new M.Cola(api, alm, { alListo: function (x, o) { cerebro.colaListo(x, o); }, alFallo: function (x, err) { decir((x.a === 'tarea' ? 'Ojo: no quedó guardado en el CRM: ' : x.a === 'gestion' ? 'Ojo: no quedó registrada: ' : x.a === 'gestionBorrar' ? 'Ojo: no se pudo borrar: ' : 'Ojo: no se marcó como hecha: ') + x.txt + '. ' + err); } });
   var cerebro = new window.VozCerebro({ datos: datos, cartera: cartera, api: api, cola: cola, alm: alm, clave: function () { return alm.get('t', ''); } });
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition, rec = null, escuchando = false, VOZ = null, ocupado = false, SEGUIR = alm.get('seguir', true);
   var ULT_DICHO = '', ULT_TEXTO = '', ULT_T = 0;

@@ -2,8 +2,9 @@
  *
  * Componente para incorporar en el CRM movil (o en cualquier pagina): una barra de busqueda que
  * responde al instante precio, stock, ficha del cliente (telefono, direccion, cotizaciones
- * abiertas), pendientes, "llama a X", "ya llame a X" y guarda recordatorios y tareas, sin salir
- * de la pagina. Humberto (25-09-2026): "algo muy profesional que luego pueda incorporar dentro
+ * abiertas), pendientes, ventas y meta, gestiones, cotizaciones vendidas y perdidas, el ano
+ * anterior, facturas y notas de credito, "llama a X", "ya llame a X", y registra gestiones,
+ * recordatorios y tareas, sin salir de la pagina. Humberto (25-09-2026): "algo muy profesional que luego pueda incorporar dentro
  * del CRM movil para poder hacer consultas rapidas, idealmente sin abrir el script".
  *
  * COMO SE INCORPORA (por ejemplo en una pagina de Apps Script / HtmlService):
@@ -95,7 +96,7 @@
       + '<button type="button" class="vc-ib x" aria-label="Borrar" hidden>' + ICO.x + '</button>'
       + '<button type="button" class="vc-ib mic" aria-label="Hablar" hidden>' + ICO.mic + '</button></form>'
       + '<div class="vc-sug" role="listbox" hidden></div>'
-      + (opc.chips === false ? '' : '<div class="vc-chips"><button type="button" class="vc-chip" data-q="qué tengo hoy">Mis pendientes</button><button type="button" class="vc-chip" data-p="precio ">Precio…</button><button type="button" class="vc-chip" data-p="stock ">Stock…</button><button type="button" class="vc-chip" data-p="teléfono de ">Cliente…</button></div>')
+      + (opc.chips === false ? '' : '<div class="vc-chips"><button type="button" class="vc-chip" data-q="qué tengo hoy">Mis pendientes</button><button type="button" class="vc-chip" data-p="precio ">Precio…</button><button type="button" class="vc-chip" data-p="stock ">Stock…</button><button type="button" class="vc-chip" data-p="teléfono de ">Cliente…</button><button type="button" class="vc-chip" data-p="gestiones con ">Gestiones…</button><button type="button" class="vc-chip" data-q="cómo voy respecto al año pasado">Año pasado</button></div>')
       + '<div class="vc-res" aria-live="polite"></div><div class="vc-pie"><span class="vc-pie-t"></span><button type="button" class="vc-act">Actualizar datos</button></div>';
     var $ = function (s) { return el.querySelector(s); }, input = $('input'), sug = $('.vc-sug'), res = $('.vc-res'), bX = $('.vc-ib.x'), bMic = $('.vc-ib.mic'), pieT = $('.vc-pie-t');
 
@@ -144,8 +145,8 @@
       else { var con = [], sin = []; top.forEach(function (x, i) { (x.stock > 0 ? con : sin).push({ x: x, d: i === 0 ? x.desc : dd[i] }); });
         decir(con.length ? con.map(function (p) { return p.d + ': ' + p.x.stock + ' unidades'; }).join('. ') + '.' + (sin.length ? ' Sin stock: ' + sin.map(function (p) { return p.d; }).join(', ') + '.' : '') : a.desc + ': sin stock.'); }
     }
-    function conVentas(fn) {
-      if (datos.ventas) return fn();
+    function conVentas(fn, nuevo) {
+      if (datos.ventas && !(nuevo && datos.ventasViejas)) return fn();
       pintar(card('Ventas', '<div class="vc-nota">Trayendo tus ventas…</div>'));
       api.llamar('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) { if (!v.ok) return aviso(v.error || 'No se pudo.', true); datos.usarVentas(v); alm.set('ventas', { t: Date.now(), v: v }); fn(); }).catch(function (e) { aviso(M.errTxt(e), true); });
     }
@@ -158,6 +159,46 @@
         decir(M.ventasTxt(v, tipo, periodo));
       }
       conVentas(function () { pintarV(datos.ventas); });
+    }
+    // Gestiones, cotizaciones por estado, ano anterior y documentos: el motor arma titulo, filas y lo que se dice.
+    function cardVista(r) {
+      var v = M.vista(r, datos);
+      pintar(card(esc(v.titulo), (v.nombre ? '<div class="vc-nom">' + esc(v.nombre) + '</div>' : '') + v.filas.map(function (f) {
+        return '<div class="vc-fila' + (f.rut && !r.cli ? ' link" data-acc="ficha" data-para="contacto" data-rut="' + esc(f.rut) : '') + '"><div><div class="n">' + esc(f.n) + '</div><div class="s">' + esc(f.s) + '</div></div><div class="v">' + esc(f.v) + (f.vs ? '<small>' + esc(f.vs) + '</small>' : '') + '</div></div>';
+      }).join('') + (v.nota ? '<div class="vc-nota">' + esc(v.nota) + '</div>' : '')
+        + (r.tipo === 'gestiones' && r.cli ? '<div class="vc-acc"><button type="button" class="vc-btn s" data-acc="gestionar" data-rut="' + esc(r.cli.r) + '">Registrar gestión</button></div>' : ''), v.etiqueta));
+      decir(v.dicho);
+    }
+    /* Registrar una gestion (28-09-2026): una linea para confirmar (cliente, que fue, cuando y el comentario) y "Si / No /
+       Cambiar". La jefatura la deja a nombre del vendedor del cliente. */
+    function aNombreDe(b) { if (!datos.todos || datos.cod) return ''; var v = (datos.cliMap[b.cli] || {}).v; return v && datos.vend[v] ? String(datos.vend[v]).split(' ')[0] : ''; }
+    function cardGestion(editar) {
+      var b = BORR, c = cartera.porRut[b.cli], quien = aNombreDe(b);
+      if (!b.cli) { if (b.clis.length) return cardElegir(b.clis, 'gestion'); BORR = null; aviso('Dime con qué cliente fue. Por ejemplo: “llamé a Clima Norte y quedó en enviar la orden”.', true); decir('¿Con qué cliente fue?'); return; }
+      if (datos.todos && !datos.cod && !quien) { BORR = null; aviso((c ? c.n : 'Ese cliente') + ' no tiene asignado un vendedor del equipo: no se puede registrar la gestión.', true); return; }
+      var pie = b.cot ? 'Cot. ' + b.cot : '';
+      if (!editar) {
+        pintar(card('¿Registro la gestión?', '<div class="vc-nom">' + esc(c ? c.n : '') + '</div><div class="vc-nota">' + esc(M.capital(M.gestTxt(b.gtipo, b.metodo))) + ' · ' + esc(M.capital(M.haceTxt(b.fecha))) + (quien ? ' · a nombre de ' + esc(quien) : '') + '</div>'
+          + '<div class="vc-fila"><div class="s">' + (b.comentario ? esc(b.comentario) : 'Sin comentario') + '</div></div>'
+          + '<div class="vc-acc"><button type="button" class="vc-btn s" data-acc="cancelar">No</button><button type="button" class="vc-btn s" data-acc="editar">Cambiar</button><button type="button" class="vc-btn p" data-acc="guardar">Sí, registrar</button></div>', pie));
+        decir(M.fraseGestion(b, cartera, quien)); return;
+      }
+      function opc(lista, val, vacio) { return (vacio ? '<option value="">' + vacio + '</option>' : '') + lista.map(function (x) { return '<option' + (x === val ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join(''); }
+      pintar(card('Registrar gestión', '<div class="vc-nom">' + esc(c ? c.n : '') + '</div>'
+        + '<div class="vc-dos"><div class="vc-campo"><label>Tipo</label><select name="gtipo">' + opc(M.GEST_TIPOS, b.gtipo) + '</select></div><div class="vc-campo"><label>Medio</label><select name="metodo">' + opc(M.GEST_METODOS, b.metodo, '—') + '</select></div></div>'
+        + '<div class="vc-dos"><div class="vc-campo"><label>Fecha</label><input name="fecha" type="date" max="' + M.iso(M.hoy0()) + '" value="' + esc(b.fecha) + '"></div><div class="vc-campo"><label>N° cotización</label><input name="cot" inputmode="numeric" value="' + esc(b.cot || '') + '"></div></div>'
+        + '<div class="vc-campo"><label>Comentario</label><textarea name="comentario">' + esc(b.comentario || '') + '</textarea></div>'
+        + '<div class="vc-acc"><button type="button" class="vc-btn s" data-acc="cancelar">Cancelar</button><button type="button" class="vc-btn p" data-acc="guardar">Registrar</button></div>', quien ? 'A nombre de ' + quien : ''));
+    }
+    function guardarGestion() {
+      var f = res.querySelector('.vc-card'), b = BORR; if (!b) return;
+      if (f && f.querySelector('[name=gtipo]')) { b.gtipo = f.querySelector('[name=gtipo]').value; b.metodo = f.querySelector('[name=metodo]').value; b.fecha = f.querySelector('[name=fecha]').value || M.iso(M.hoy0()); b.cot = f.querySelector('[name=cot]').value.trim(); b.comentario = f.querySelector('[name=comentario]').value.trim(); }
+      var d = M.datosGestion(b, cartera); BORR = null;
+      datos.gest.unshift({ f: d.fecha, rut: d.rut, n: d.cliente, tipo: d.tipo, met: d.metodo, cot: d.cot, contacto: '', com: d.comentario, vc: datos.cod || (datos.cliMap[d.rut] || {}).v || '', folio: 'prov-' + d.rid, rid: d.rid });
+      pintar(card('Gestión registrada', '<div class="vc-nom">' + esc(d.cliente) + '</div><div class="vc-nota">' + esc(M.capital(M.gestTxt(d.tipo, d.metodo))) + ' · ' + esc(M.capital(M.haceTxt(d.fecha))) + (d.comentario ? ' · ' + esc(d.comentario) : '') + '</div>'
+        + '<div class="vc-nota" data-env="' + d.rid + '">' + (navigator.onLine === false ? 'Sin señal: se enviará al CRM cuando vuelva.' : 'Enviando al CRM…') + '</div>'));
+      decir('Listo, registré la gestión con ' + d.cliente + '.');
+      cola.agregar('gestion', d, 'Gestión con ' + d.cliente);
     }
     function cardNoProd(q) { pintar(card('Producto', '<div class="vc-nota">No encontré “' + esc(q) + '”. Prueba con otras palabras o el código.</div>')); decir('No encontré ese producto'); }
     function cardFicha(o, para) {
@@ -200,6 +241,7 @@
        formulario completo solo si se toca "Cambiar" (Humberto, 25-09-2026: "por que aparece un
        formulario?"). */
     function cardBorrador(editar) {
+      if (BORR && BORR.tipo === 'gestion') return cardGestion(editar);
       var b = BORR, c = cartera.porRut[b.cli], nomTipo = { recordatorio: 'Recordatorio', tarea: 'Tarea', visita: 'Visita', prosp: 'Prospección', nota: 'Nota' }[b.tipo];
       if (!editar) {
         pintar(card('¿Lo guardo?', '<div class="vc-nom">' + esc(b.titulo) + '</div><div class="vc-nota">' + nomTipo + ' · ' + esc(M.capital(M.fechaTxt(b.fecha))) + (b.hora && b.tipo === 'recordatorio' ? ' a las ' + esc(b.hora) : '') + (c ? ' · ' + esc(c.n) : '') + '</div>'
@@ -221,6 +263,7 @@
       BORR.hora = f.querySelector('[name=hora]').value; BORR.detalle = f.querySelector('[name=detalle]').value.trim();
     }
     function guardarBorrador() {
+      if (BORR && BORR.tipo === 'gestion') return guardarGestion();
       leerBorrador(); var b = BORR; if (!b) return;
       if (!b.titulo) { aviso('Falta qué hay que hacer.', true); return; }
       var d = M.datosTarea(b, cartera), q = 'para ' + M.fechaTxt(d.fecha) + (d.hora ? ' a las ' + d.hora : ''); BORR = null;
@@ -243,13 +286,15 @@
     function colaListo(x, o) {
       var e = res.querySelector('[data-env="' + x.d.rid + '"]');
       if (x.a === 'tarea') { PEND.forEach(function (t) { if (t.id === 'prov-' + x.d.rid) t.id = o.id || t.id; }); if (e) e.textContent = '✓ Guardado en el CRM' + (o.aviso === 'ok' ? ' · con aviso en tu teléfono' : ''); }
+      else if (x.a === 'gestion') { datos.gest.forEach(function (g) { if (g.rid === x.d.rid) g.folio = o.folio || g.folio; }); if (e) e.textContent = o.prueba ? '✓ Registrada en modo prueba (todavía no va al CRM)' : '✓ Registrada en el CRM'; }
       else if (e) e.textContent = '✓ Marcada en el CRM';
       if (opc.alGuardado) opc.alGuardado(x, o);
       cargarPend();
     }
     function colaFallo(x, err, quizas) {
-      var m = (x.a === 'tarea' ? (quizas ? 'Sin confirmación del CRM para: ' : 'No quedó guardado en el CRM: ') : 'No se marcó como hecha: ') + x.txt + '. ' + err;
+      var m = (x.a === 'tarea' || x.a === 'gestion' ? (quizas ? 'Sin confirmación del CRM para: ' : 'No quedó guardado en el CRM: ') : 'No se marcó como hecha: ') + x.txt + '. ' + err;
       if (x.a === 'tarea' && !quizas) PEND = PEND.filter(function (t) { return t.id !== 'prov-' + x.d.rid; });
+      if (x.a === 'gestion' && !quizas) datos.gest = datos.gest.filter(function (g) { return g.rid !== x.d.rid; });
       var e = res.querySelector('[data-env="' + x.d.rid + '"]'); if (e) { e.className = 'vc-nota err'; e.textContent = m; } else aviso(m, true);
       decir(m);
     }
@@ -264,6 +309,7 @@
       if (t.tipo === 'pendientes') return card('Pendientes', (d || []).length ? d.slice(0, 8).map(filaPend).join('') : '<div class="vc-nota">Nada pendiente.</div>', '', true);
       if (t.tipo === 'guardado') return card('Guardado en el CRM', '<div class="vc-nom">' + esc(d.titulo) + '</div><div class="vc-nota">' + esc(M.capital(M.fechaTxt(d.fecha))) + (d.hora ? ' a las ' + esc(d.hora) : '') + (d.cliente ? ' · ' + esc(d.cliente) : '') + '</div>', '', true);
       if (t.tipo === 'hecha') return card('Marcada como hecha', '', '', true);
+      if (t.tipo === 'gestion') return card(d.prueba ? 'Gestión registrada (modo prueba)' : 'Gestión registrada en el CRM', '<div class="vc-nom">' + esc(d.cliente) + '</div><div class="vc-nota">' + esc(M.capital(M.gestTxt(d.tipo, d.metodo))) + (d.comentario ? ' · ' + esc(d.comentario) : '') + '</div>', '', true);
       return '';
     }
     function preguntarIA(texto) {
@@ -289,6 +335,7 @@
       texto = String(texto || '').trim(); if (!texto) return;
       ocultarSug();
       if (HECHA) { var r0 = M.siNo(texto); if (r0 > 0) { marcarHecha(HECHA.id); return; } if (r0 < 0) { HECHA = null; pintar(''); decir('Bien, no la marco.'); return; } HECHA = null; }
+      if (BORR && BORR.tipo === 'gestion' && M.corregirGestion(BORR, texto, cartera).length) { cardGestion(); return; }
       if (BORR) {
         var r1 = M.siNo(texto);
         if (r1 > 0) { guardarBorrador(); return; }
@@ -296,8 +343,10 @@
         BORR = null;                                              // otra cosa: orden nueva
       }
       var r = M.interpretar(texto, { datos: datos, cartera: cartera });
-      if (r.tipo === 'saludo' || r.tipo === 'ayuda') { var m0 = r.tipo === 'saludo' ? 'Hola. ¿Qué necesitas? Precios, stock, datos de un cliente, tus pendientes o un recordatorio.' : 'Puedo decirte precio y stock de un producto; teléfono, dirección y cotizaciones abiertas de un cliente; tus pendientes; y guardar recordatorios, tareas y notas. Por ejemplo: “precio del R410A para Clima Norte”, “teléfono de Refritec”, “recuérdame llamar a Frío Sur mañana a las 10”.'; pintar(card(r.tipo === 'saludo' ? 'Hola' : 'Qué puedo hacer', '<div class="vc-nota">' + esc(m0) + '</div>')); decir(m0); return; }
+      if (r.tipo === 'saludo' || r.tipo === 'ayuda') { var m0 = r.tipo === 'saludo' ? 'Hola. ¿Qué necesitas? Precios, stock, datos de un cliente, tus pendientes o un recordatorio.' : 'Puedo decirte precio y stock de un producto; teléfono, dirección, cotizaciones, compras, facturas y gestiones de un cliente; tus ventas, tu meta y cómo vas contra el año pasado; tus pendientes; y registrar gestiones, recordatorios, tareas y notas. Por ejemplo: “llamé a Clima Norte y quedó en enviar la orden”, “qué hablé con Refritec”, “últimas facturas de Frío Sur”.'; pintar(card(r.tipo === 'saludo' ? 'Hola' : 'Qué puedo hacer', '<div class="vc-nota">' + esc(m0) + '</div>')); decir(m0); return; }
       if (r.tipo === 'pend') return cardPend(true);
+      if (r.tipo === 'gestiones') return r.resultado ? cardVista(r) : aviso('Todavía no tengo las gestiones en este equipo.', true);
+      if (r.tipo === 'cotvend' || r.tipo === 'comparar' || r.tipo === 'docs') return conVentas(function () { cardVista(r); }, true);
       if (r.tipo === 'ventas' || r.tipo === 'meta') return cardVentas(r.tipo, r.periodo);
       if (r.tipo === 'riesgo' || r.tipo === 'mejores' || r.tipo === 'compras') return conVentas(function () {
         if (r.tipo === 'compras') { var cc = datos.comprasDe(r.cli.r) || { anio: 0, mes: 0, prods: [] }; pintar(card('Compras', '<div class="vc-nom">' + esc(r.cli.n) + '</div><div class="vc-fila"><div class="s">Este mes</div><div class="v">' + pesos(cc.mes) + '</div></div><div class="vc-fila"><div class="s">En el año</div><div class="v">' + pesos(cc.anio) + '</div></div><div class="vc-fila"><div class="s">Última compra</div><div class="v">' + (cc.ult ? esc(cc.ult) + '<small>hace ' + cc.dias + ' días</small>' : '—') + '</div></div>' + (cc.prods && cc.prods.length ? '<div class="vc-nota">Últimos productos: ' + esc(cc.prods.join(' · ')) + '</div>' : ''))); decir(M.comprasTxt(r.cli.n, datos.comprasDe(r.cli.r))); return; }
@@ -416,6 +465,9 @@
       var b = ev.target.closest('[data-acc]'); if (!b) return;
       var acc = b.dataset.acc;
       if (acc === 'cerrar') { BORR = null; HECHA = null; pintar(''); }
+      else if (acc === 'ficha' && b.dataset.para === 'gestion') { if (BORR) { BORR.cli = b.dataset.rut; cardGestion(); } }
+      else if (acc === 'ficha' && (b.dataset.para === 'gestiones' || b.dataset.para === 'docs')) { var rv = { tipo: b.dataset.para, cli: cartera.porRut[b.dataset.rut], periodo: '' }; if (rv.tipo === 'docs') conVentas(function () { cardVista(rv); }, true); else cardVista(rv); }
+      else if (acc === 'gestionar') { BORR = M.gestionDe('', [cartera.porRut[b.dataset.rut]].filter(Boolean)); HECHA = null; cardGestion(true); }
       else if (acc === 'ficha') verFicha(b.dataset.rut, b.dataset.para || 'contacto');
       else if (acc === 'hecha') marcarHecha(b.dataset.id);
       else if (acc === 'otra') { HECHA = null; cardPend(false); }

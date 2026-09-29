@@ -40,6 +40,11 @@
   C.prototype.colaListo = function (x, o) {
     var self = this;
     if (x.a === 'tarea') this.pend.forEach(function (t) { if (t.id === 'prov-' + x.d.rid) t.id = o.id || t.id; });
+    if (x.a === 'gestion') {
+      (this.datos.gest || []).forEach(function (g) { if (g.rid === x.d.rid) { g.folio = o.folio || g.folio; g.prueba = !!o.prueba; } });
+      if (this.cancelarAlConfirmar === x.d.rid && o.folio) { this.cancelarAlConfirmar = null; this.cola.agregar('gestionBorrar', { folio: o.folio, fecha: x.d.fecha, cliente: x.d.cliente, rid: M.ridNuevo() }, 'Borrar gestión'); }
+      return;
+    }
     if (this.cancelarAlConfirmar === x.d.rid && o.id) { this.cancelarAlConfirmar = null; this.pend = this.pend.filter(function (t) { return t.id !== o.id; }); this.cola.agregar('hecha', { id: o.id, rid: M.ridNuevo(), comentario: 'Cancelada por voz' }, x.txt); }
   };
   C.prototype.horaDe = function (t) { if (t.hora) return t.hora; var m = String(t.detalle || '').match(/\b(\d{1,2}:\d{2})\b/); return m ? m[1] : ''; };
@@ -94,12 +99,39 @@
           return this.confirmar(bq);
         }
         if (M.siNo(texto) < 0) return 'Bien, lo dejamos.';
+      } else if (p.tipo === 'gcli') {
+        var cg = this.cartera.buscar(texto, true);
+        if (cg.length === 1 || (cg.length && (cg[0]._cob || 0) >= .6)) { p.borrador.cli = cg[0].r; p.borrador.clis = cg; return this.seguirGestion(p.borrador); }
+        if (cg.length > 1) { this.pregunta = { tipo: 'cual', clis: cg, para: 'borrador', borrador: p.borrador }; return '¿Cuál? ' + this.listaNombres(cg); }
+        if (M.siNo(texto) < 0) return 'Bien, no la registro.';
+        if (!p.intentos) { p.intentos = 1; this.pregunta = p; return 'No reconocí ese cliente en tu cartera. Dime el nombre de nuevo.'; }
+        return 'No encontré ese cliente. Lo dejo sin registrar.';
+      } else if (p.tipo === 'gcoment') {
+        var itc = M.intencion(texto);
+        if (/ (sin comentario|nada|ninguno|no hace falta|asi no mas|dejalo asi) /.test(n) || (M.siNo(texto) < 0 && n.trim().split(' ').length <= 3)) { p.borrador.sinComentario = true; return this.confirmar(p.borrador); }
+        if (!/^(pend|precio|stock|contacto|cotiz|llamar|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores)$/.test(itc)) {
+          p.borrador.comentario = M.capital(texto.replace(/^\s*(que|anota que|pon que|comentario:?)\s+/i, '')).slice(0, 300); var fc = M.leerFecha(texto), cc0 = M.cotizacionDe(texto);
+          if (cc0 && !p.borrador.cot) { p.borrador.cot = cc0; if (p.borrador.gtipo === 'Contacto') p.borrador.gtipo = 'Seguimiento cotización'; }
+          return this.confirmar(p.borrador);
+        }
+      } else if (p.tipo === 'confirmar' && p.borrador.tipo === 'gestion') {
+        var bg = p.borrador, itg = M.intencion(texto), otra = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado|recordatorio)$/.test(itg);
+        if (!otra) {
+          if (M.corregirGestion(bg, texto, this.cartera).length) return this.confirmar(bg, true);
+          s = M.siNo(texto);
+          if (s > 0) return this.guardarGestion(bg);
+          if (s < 0) return p.ofrecida ? 'Bien.' : 'Bien, no la registro.';
+          if (p.ofrecida) otra = true;                                   // fue un ofrecimiento: lo que no es respuesta es una orden nueva
+          else if ((p.intentos || 0) >= 1) return 'La dejo sin registrar. ¿Qué necesitas?';
+          if (!otra) { p.intentos = 1; this.pregunta = p;
+          return 'No te entendí. ' + M.fraseGestion(bg, this.cartera, this.aNombreDe(bg)).replace('¿La registro?', '¿Sí o no?'); }
+        }
       } else if (p.tipo === 'confirmar') {
         // Humberto (25-09-2026): "antes de una accion, confirmar dando el detalle". Aqui llega el si,
         // el no, una correccion ("mejor el jueves", "a las 4", "sin cliente", "que diga..."), o lo
         // repite completo (se reemplaza el borrador), o pide otra cosa (se atiende).
         var b0 = p.borrador, cambios = [], f0 = M.leerFecha(texto), it = M.intencion(texto), palabras = n.trim().split(' ').length;
-        var nueva = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda)$/.test(it) || (/^(recordatorio|tarea|nota|visita|prosp)$/.test(it) && palabras >= 3 && M.tituloDe(texto, f0).length > 3);
+        var nueva = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|gestion|cotvend|comparar|docs|compras|riesgo|mejores|cotizado)$/.test(it) || (/^(recordatorio|tarea|nota|visita|prosp)$/.test(it) && palabras >= 3 && M.tituloDe(texto, f0).length > 3);
         if (!nueva) {
           if (f0.iso && f0.iso !== b0.fecha) { b0.fecha = f0.iso; cambios.push('fecha'); }
           if (f0.hora && f0.hora !== b0.hora) { b0.hora = f0.hora; cambios.push('hora'); }
@@ -119,7 +151,9 @@
       } else if (p.tipo === 'cual') {
         var c = this.elegirDe(texto, p.clis);
         if (c) {
-          if (p.para === 'borrador') { p.borrador.cli = c.r; return this.confirmar(p.borrador); }
+          if (p.para === 'borrador') { p.borrador.cli = c.r; return p.borrador.tipo === 'gestion' ? this.seguirGestion(p.borrador) : this.confirmar(p.borrador); }
+          if (p.para === 'gestiones') { this.ult.cli = c; return M.gestionesTxt(c.n, this.datos.gestionesDe(c.r)); }
+          if (p.para === 'docs') { var selfD = this; this.ult.cli = c; return this.conVentas(function () { return M.docsTxt(c.n, selfD.datos.docsDe(c.r)); }, true); }
           if (p.para === 'cotizado') { this.ult.cli = c; return M.cotizadoTxt(c.n, this.datos.cotizado(c.r)); }
           if (p.para === 'compras') { var selfC = this; this.ult.cli = c; return this.conVentas(function () { return M.comprasTxt(c.n, selfC.datos.comprasDe(c.r)); }); }
           return p.para === 'cuando' ? this.cuando(texto, c) : this.conCliente(p.para, c);
@@ -127,7 +161,14 @@
         if (M.siNo(texto) < 0) return 'Bien.';
       } else if (p.tipo === 'hecha') {
         s = M.siNo(texto);
-        if (s > 0) return this.marcarHecha(p.tarea);
+        if (s > 0) {
+          var hecho = this.marcarHecha(p.tarea), ch = this.clienteDeTarea(p.tarea);
+          if (ch && /^Listo/.test(hecho) && this.puedeGestion(ch)) {
+            var bh = M.gestionDeTarea(p.tarea, p.texto || '', ch); this.pregunta = { tipo: 'confirmar', borrador: bh, ofrecida: true };
+            return hecho + ' ¿Registro también la gestión con ' + ch.n + ': ' + M.gestTxt(bh.gtipo, bh.metodo) + (bh.comentario && bh.comentario !== p.tarea.titulo ? ', ' + bh.comentario.replace(/[.\s]+$/, '') : '') + '?';
+          }
+          return hecho;
+        }
         if (s < 0) return 'Bien, no la marco.';
       } else if (p.tipo === 'ia') {
         if (M.intencion(texto) === 'nose' || M.siNo(texto) !== 0) return this.preguntarIA(texto);   // le contesta a la IA
@@ -136,18 +177,34 @@
     }
     // 2) Deshacer lo ultimo ("no, borra eso")
     var n2 = ' ' + n.replace(/[.,;:!?]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
-    if (/^ (no )?(no )?(cancela\w*|borra\w*|deshaz\w*|olvida\w*|elimina\w*|quita\w*|anula\w*)( eso| lo ultimo| ese recordatorio| esa tarea| la tarea| el recordatorio| la nota| esa nota)? $/.test(n2) && this.ultimaAccion && Date.now() - this.ultimaAccion.t < 180000) return this.deshacer();
+    if (/^ (no )?(no )?(cancela\w*|borra\w*|deshaz\w*|olvida\w*|elimina\w*|quita\w*|anula\w*)( eso| lo ultimo| ese recordatorio| esa tarea| la tarea| el recordatorio| la nota| esa nota| esa gestion| la gestion)? $/.test(n2) && this.ultimaAccion && Date.now() - this.ultimaAccion.t < 180000) return this.deshacer();
     // 3) Pronombres: "cuando tengo que llamarlo" es el ultimo cliente del que se hablo
     var t2 = texto;
     if (this.ult.cli && !this.cartera.buscar(texto).length && /\b(lo|la|le|los|les|ese|esa|ellos|ese cliente|esa empresa|con el|con ella|a el|a ella)\b/.test(n)) t2 = texto + ' ' + this.ult.cli.n;
     // 4) "cuando tengo que...", "a que hora": se contesta con los pendientes
-    if (/\b(cuando|a que hora|que dia|para cuando|para que dia)\b/.test(n) && !M.R.record.test(n) && !/\b(anota|apunta|agenda)/.test(n) && !M.R.compras.test(n) && !M.R.ventas.test(n)) return this.cuando(t2);
+    if (/\b(cuando|a que hora|que dia|para cuando|para que dia)\b/.test(n) && !M.R.record.test(n) && !/\b(anota|apunta|agenda)/.test(n) && !M.R.compras.test(n) && !M.R.ventas.test(n)
+      && !M.R.gestiones.test(n) && !M.R.docs.test(n) && !M.R.cotvend.test(n) && !M.R.comparar.test(n) && !M.esPasado(texto)) return this.cuando(t2);
     var r = M.interpretar(t2, { datos: this.datos, cartera: this.cartera });
     if (r.tipo === 'saludo' || r.tipo === 'ayuda') return this._atenderTipo(r.tipo, n);
     if (r.tipo === 'pend') return this.decirPendientes();
     if (r.tipo === 'ventas' || r.tipo === 'meta') return this.decirVentas(r.tipo, r.periodo);
     if (r.tipo === 'riesgo' || r.tipo === 'mejores') { var self0 = this; return this.conVentas(function () { return M.carteraTxt(r.sub, self0.datos.cartera(r.sub)); }); }
     if (r.tipo === 'compras') { var self1 = this; this.ult.cli = r.cli; return this.conVentas(function () { return M.comprasTxt(r.cli.n, self1.datos.comprasDe(r.cli.r)); }); }
+    if (r.tipo === 'gestiones') {
+      if (r.cli) this.ult.cli = r.cli;
+      if (!r.resultado) return 'Todavía no tengo las gestiones en el teléfono; dame unos segundos.';
+      return r.cli ? M.gestionesTxt(r.cli.n, r.resultado) : M.gestPeriodoTxt(r.periodo, r.resultado, this.datos.todos);
+    }
+    if (r.tipo === 'cotvend' || r.tipo === 'comparar' || r.tipo === 'docs') {
+      var selfV = this; if (r.cli) this.ult.cli = r.cli;
+      return this.conVentas(function () {
+        var d = selfV.datos;
+        if (r.tipo === 'cotvend') return r.cli ? M.cotHistCliTxt(r.cli.n, d.cotHist(r.cli.r)) : M.cotHistTxt(d.ventas, r.periodo);
+        if (r.tipo === 'comparar') return r.cli ? M.comparaCliTxt(r.cli.n, d.comprasDe(r.cli.r)) : M.comparaTxt(d.ventas);
+        if (r.cli) return M.docsTxt(r.cli.n, d.docsDe(r.cli.r));
+        return r.folio ? M.docFolioTxt(d.docPorFolio(r.folio), r.folio) : M.docsPeriodoTxt(r.periodo, d.docsPeriodo(r.periodo), d.todos);
+      }, true);
+    }
     if (r.tipo === 'cotizado') {
       if (r.cli) this.ult.cli = r.cli;
       if (!r.resultado) return 'Todavía no tengo las cotizaciones en el teléfono; dame unos segundos.';
@@ -164,8 +221,9 @@
       var cand = M.buscarPendiente(t2, r.cli, this.pend);
       if (!cand.length) return this.pend.length ? 'No encontré ese pendiente. Tienes ' + this.pend.length + (this.pend.length === 1 ? ' pendiente' : ' pendientes') + '; dime cuál es.' : 'No tienes pendientes.';
       // Siempre se confirma antes de actuar (Humberto, 25-09-2026).
-      this.pregunta = { tipo: 'hecha', tarea: cand[0] }; return '¿Marco como hecha: ' + cand[0].titulo + (cand[0].cliente ? ', de ' + cand[0].cliente : '') + '?';
+      this.pregunta = { tipo: 'hecha', tarea: cand[0], texto: texto }; return '¿Marco como hecha: ' + cand[0].titulo + (cand[0].cliente ? ', de ' + cand[0].cliente : '') + '?';
     }
+    if (r.tipo === 'borrador' && r.borrador.tipo === 'gestion') return this.seguirGestion(r.borrador);
     if (r.tipo === 'borrador') {
       var b = r.borrador, dicho = M.leerFecha(texto);
       // Falta el que ("puedes guardar un recordatorio"): se pregunta, no se adivina.
@@ -179,13 +237,13 @@
   };
   C.prototype._atenderTipo = function (tipo, n) {
     if (tipo === 'saludo') return this.saludo(n);
-    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección, lo cotizado y lo comprado por un cliente; tus ventas de hoy, la semana y el mes, tu meta y cuánto te falta; qué clientes llevan tiempo sin comprar y cuáles son los mejores; tus pendientes; y guardar recordatorios, tareas y notas. Por ejemplo: precio del R410A para Clima Norte; cuánto me ha comprado Refritec; clientes en riesgo; cómo voy con la meta; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
+    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección, lo cotizado, lo comprado, las facturas y las gestiones de un cliente; tus ventas de hoy, la semana y el mes, tu meta, cómo vas contra el año pasado y cuántas cotizaciones has vendido o perdido; qué clientes llevan tiempo sin comprar; tus pendientes; y registrar gestiones, recordatorios, tareas y notas. Por ejemplo: llamé a Clima Norte y quedó en enviar la orden; qué hablé con Refritec; cómo voy respecto al año pasado; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
   };
   // Ventas, meta, compras y cartera salen de la accion "ventas" (viene con la copia); si aun no esta, se pide ahora.
-  C.prototype.conVentas = function (fn) {
+  C.prototype.conVentas = function (fn, nuevo) {
     var self = this;
-    if (this.datos.ventas) return fn();
-    if (!this.enLinea() || !this.clave()) return 'Todavía no tengo las ventas en el teléfono y no hay señal para traerlas.';
+    if (this.datos.ventas && !(nuevo && this.datos.ventasViejas)) return fn();   // nuevo: necesita lo que trae la API desde el 29-09
+    if (!this.enLinea() || !this.clave()) return this.datos.ventas ? fn() : 'Todavía no tengo las ventas en el teléfono y no hay señal para traerlas.';
     return this.api.llamar('ventas', {}, { releer: 2, plazo: 120000 }).then(function (v) {
       if (!v.ok) return v.error || 'No pude traer las ventas.';
       self.datos.usarVentas(v); if (self.alVentas) self.alVentas(v);
@@ -197,7 +255,7 @@
     if (/gracias/.test(n)) return 'De nada. Aquí estoy.';
     if (/chao|adios|hasta luego|nos vemos/.test(n)) return 'Chao, que te vaya bien.';
     var nom = String(this.nombre || '').split(' ')[0];
-    return { dicho: 'Hola' + (nom ? ', ' + nom : '') + '. ¿Qué necesitas? Puedo darte precios, stock, datos de un cliente, tus pendientes, o guardar un recordatorio.', seguir: true };
+    return { dicho: 'Hola' + (nom ? ', ' + nom : '') + '. ¿Qué necesitas? Puedo darte precios, stock, datos y gestiones de un cliente, tus ventas, tus pendientes, o registrar una gestión o un recordatorio.', seguir: true };
   };
   C.prototype.listaNombres = function (clis) { var ns = clis.slice(0, 4).map(function (c) { return c.n; }); return ns.length > 1 ? ns.slice(0, -1).join(', ') + ' o ' + ns[ns.length - 1] : ns[0]; };
   // "el primero", "Frio Sur": cual de los candidatos
@@ -263,6 +321,7 @@
      y se espera si, no o una correccion. */
   C.prototype.confirmar = function (b, corregido) {
     this.pregunta = { tipo: 'confirmar', borrador: b };
+    if (b.tipo === 'gestion') return (corregido ? 'Queda así. ' : '') + M.fraseGestion(b, this.cartera, this.aNombreDe(b));
     var c = this.cartera.porRut[b.cli], cuando = M.fechaTxt(b.fecha) + (b.hora ? ' a las ' + b.hora : ''), que = b.titulo.charAt(0).toLowerCase() + b.titulo.slice(1);
     var pre = corregido ? 'Queda así. ' : '';
     if (b.tipo === 'recordatorio') return pre + 'Recordatorio para ' + que + ', ' + cuando + (c ? ', cliente ' + c.n : '') + '. ¿Lo guardo?';
@@ -286,6 +345,40 @@
     if (b.tipo === 'prosp') return 'Listo, registré la prospección' + (c ? ' de ' + c.n : '') + '.';
     return 'Listo, guardé la tarea: ' + que + ', para ' + cuando + '.';
   };
+  /* GESTIONES (28-09-2026). Contar algo hecho con un cliente ("llamé a X y quedó en...") es una gestión del CRM: se completa lo
+     que falte (cliente, comentario), se confirma con el detalle y se registra por detrás. La jefatura la deja a nombre del
+     vendedor del cliente. */
+  C.prototype.aNombreDe = function (b) {
+    if (!this.datos.todos || this.datos.cod) return '';
+    var v = (this.datos.cliMap[b.cli] || {}).v; return v && this.datos.vend[v] ? String(this.datos.vend[v]).split(' ')[0] : '';
+  };
+  C.prototype.puedeGestion = function (c) { return !(this.datos.todos && !this.datos.cod) || !!this.aNombreDe({ cli: c.r }); };
+  C.prototype.clienteDeTarea = function (t) {
+    if (!t || !t.cliente) return null;
+    var n = M.norm(t.cliente); return this.cartera.lista.filter(function (c) { return M.norm(c.n) === n; })[0] || null;
+  };
+  C.prototype.seguirGestion = function (b) {
+    if (!b.cli && b.clis.length > 1) { this.pregunta = { tipo: 'cual', clis: b.clis, para: 'borrador', borrador: b }; return '¿Con qué cliente fue? ' + this.listaNombres(b.clis); }
+    if (!b.cli) { this.pregunta = { tipo: 'gcli', borrador: b }; return '¿Con qué cliente fue la gestión?'; }
+    var c = this.cartera.porRut[b.cli]; if (c) this.ult.cli = c;
+    if (c && !this.puedeGestion(c)) return c.n + ' no tiene asignado un vendedor del equipo, así que no puedo registrar la gestión.';
+    if (!b.comentario && !b.sinComentario) { this.pregunta = { tipo: 'gcoment', borrador: b }; return '¿Qué anoto de la gestión con ' + (c ? c.n : 'el cliente') + '? Es ' + M.gestTxt(b.gtipo, b.metodo) + '.'; }
+    return this.confirmar(b);
+  };
+  C.prototype.guardarGestion = function (b) {
+    var d = M.datosGestion(b, this.cartera), c = this.cartera.porRut[b.cli];
+    this.datos.gest.unshift({ f: d.fecha, rut: d.rut, n: d.cliente, tipo: d.tipo, met: d.metodo, cot: d.cot, contacto: '', com: d.comentario, vc: this.datos.cod || (this.datos.cliMap[b.cli] || {}).v || '', folio: 'prov-' + d.rid, rid: d.rid });
+    this.cola.agregar('gestion', d, 'Gestión con ' + d.cliente);
+    this.ultimaAccion = { tipo: 'gestion', rid: d.rid, t: Date.now(), txt: 'Gestión con ' + d.cliente }; if (c) this.ult.cli = c;
+    return 'Listo, registré la gestión con ' + d.cliente + ': ' + M.gestTxt(d.tipo, d.metodo) + (d.fecha !== M.iso(M.hoy0()) ? ', ' + M.haceTxt(d.fecha) : '') + '.';
+  };
+  C.prototype.deshacerGestion = function (a) {
+    var g = (this.datos.gest || []).filter(function (x) { return x.rid === a.rid; })[0], enCola = this.cola.lista().some(function (x) { return x.d && x.d.rid === a.rid; });
+    this.datos.gest = (this.datos.gest || []).filter(function (x) { return x.rid !== a.rid; });
+    if (enCola && !this.cola.enviando) { this.cola.alm.set('cola', this.cola.lista().filter(function (x) { return !(x.d && x.d.rid === a.rid); })); return 'Listo, la borré.'; }
+    if (g && g.folio && !/^prov-/.test(g.folio)) { this.cola.agregar('gestionBorrar', { folio: g.folio, fecha: g.f, cliente: g.n, rid: M.ridNuevo() }, 'Borrar gestión'); return 'Ya estaba registrada: la borro.'; }
+    this.cancelarAlConfirmar = a.rid; return 'Va en camino al CRM; apenas llegue la borro.';
+  };
   C.prototype.marcarHecha = function (t) {
     if (/^prov-/.test(t.id)) return 'Esa tarea todavía va en camino al CRM; espera un momento.';
     this.pend = this.pend.filter(function (x) { return x.id !== t.id; });
@@ -294,7 +387,9 @@
     return 'Listo, marqué como hecha: ' + t.titulo + '.';
   };
   C.prototype.deshacer = function () {
-    var a = this.ultimaAccion; this.ultimaAccion = null; if (!a || a.tipo !== 'tarea') return 'No hay nada que deshacer.';
+    var a = this.ultimaAccion; this.ultimaAccion = null;
+    if (a && a.tipo === 'gestion') return this.deshacerGestion(a);
+    if (!a || a.tipo !== 'tarea') return 'No hay nada que deshacer.';
     var enCola = this.cola.lista().some(function (x) { return x.d && x.d.rid === a.rid; }), self = this;
     var real = this.pend.filter(function (t) { return t.id === 'prov-' + a.rid; }).length ? null : (this.pend.filter(function (t) { return t.titulo === a.txt; })[0] || null);
     if (enCola && !this.cola.enviando) { this.cola.alm.set('cola', this.cola.lista().filter(function (x) { return !(x.d && x.d.rid === a.rid); })); this.pend = this.pend.filter(function (t) { return t.id !== 'prov-' + a.rid; }); return 'Listo, lo borré.'; }
@@ -310,6 +405,7 @@
       if (!o.ok) { if (o.sinIA) self.ia = false; return { dicho: o.sinIA ? 'No te entendí, y la inteligencia artificial no está configurada.' : (o.error || 'No se pudo.') }; }
       if (/\?\s*$/.test(o.texto)) self.pregunta = { tipo: 'ia' };
       if ((o.tarjetas || []).some(function (t) { return t.tipo === 'guardado' || t.tipo === 'hecha'; })) self.refrescarPendientes();
+      (o.tarjetas || []).forEach(function (t) { var g = t.datos || {}; if (t.tipo === 'gestion') self.datos.gest.unshift({ f: g.fecha, rut: g.rut, n: g.cliente, tipo: g.tipo, met: g.metodo, cot: g.cot, contacto: '', com: g.comentario, vc: g.vendedor, folio: g.folio }); });
       return { dicho: o.texto, ia: true };
     }, function (e) { return { dicho: e.red ? 'Sin conexión: pregúntame de nuevo cuando tengas señal.' : 'No me llegó la respuesta; pregúntame de nuevo en unos segundos.' }; });
   };
