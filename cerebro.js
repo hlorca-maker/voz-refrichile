@@ -120,7 +120,7 @@
           return this.confirmar(p.borrador);
         }
       } else if (p.tipo === 'confirmar' && p.borrador.tipo === 'gestion') {
-        var bg = p.borrador, itg = M.intencion(texto), otra = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado|recordatorio)$/.test(itg);
+        var bg = p.borrador, itg = M.intencion(texto), otra = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado|recordatorio)$/.test(itg) || M.esOtraGestion(bg, texto, this.cartera);
         if (!otra) {
           if (M.corregirGestion(bg, texto, this.cartera).length) return M.gestPideCot(bg) ? this.seguirGestion(bg) : this.confirmar(bg, true);
           s = M.siNo(texto);

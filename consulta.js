@@ -179,7 +179,7 @@
       var pie = b.cot ? 'Cot. ' + b.cot : '', falta = M.gestPideCot(b);
       if (falta) { editar = true; decir('Falta el número de la cotización.'); }
       if (!editar) {
-        pintar(card('¿Registro la gestión?', '<div class="vc-nom">' + esc(c ? c.n : '') + '</div><div class="vc-nota">' + esc(M.capital(M.gestTxt(b.gtipo, b.metodo))) + ' · ' + esc(M.capital(M.haceTxt(b.fecha))) + (quien ? ' · a nombre de ' + esc(quien) : '') + '</div>'
+        pintar(card('¿Registro la gestión?', '<div class="vc-nom">' + esc(c ? c.n : '') + '</div><div class="vc-nota">' + esc(M.capital(M.gestTxt(b.gtipo, b.metodo))) + ' · ' + esc(M.capital(M.haceTxt(b.fecha))) + (b.origen === 'Entrante' ? ' · lo inició el cliente' : '') + (quien ? ' · a nombre de ' + esc(quien) : '') + '</div>'
           + '<div class="vc-fila"><div class="s">' + (b.comentario ? esc(b.comentario) : 'Sin comentario') + '</div></div>'
           + '<div class="vc-acc"><button type="button" class="vc-btn s" data-acc="cancelar">No</button><button type="button" class="vc-btn s" data-acc="editar">Cambiar</button><button type="button" class="vc-btn p" data-acc="guardar">Sí, registrar</button></div>', pie));
         decir(M.fraseGestion(b, cartera, quien)); return;
@@ -339,6 +339,7 @@
       texto = String(texto || '').trim(); if (!texto) return;
       ocultarSug();
       if (HECHA) { var r0 = M.siNo(texto); if (r0 > 0) { marcarHecha(HECHA.id); return; } if (r0 < 0) { HECHA = null; pintar(''); decir('Bien, no la marco.'); return; } HECHA = null; }
+      if (BORR && BORR.tipo === 'gestion' && M.esOtraGestion(BORR, texto, cartera)) BORR = null;
       if (BORR && BORR.tipo === 'gestion' && M.corregirGestion(BORR, texto, cartera).length) { cardGestion(); return; }
       if (BORR) {
         var r1 = M.siNo(texto);

@@ -700,6 +700,7 @@ function responder(texto) {
   if (!BORR) return false;
   if (BORR.tipo === 'gestion') {
     leerGestion();
+    if (M.esOtraGestion(BORR, texto, CM)) { BORR = null; RESP_INTENTOS = 0; return false; }
     if (M.gestPideCot(BORR)) {
       var nc = (texto.replace(/[.\s]/g, '').match(/\d{3,8}/) || [])[0];
       if (nc) { BORR.cot = nc; pintarGestion(); preguntar(M.fraseGestion(BORR, CM, aNombreDe(BORR))); return true; }

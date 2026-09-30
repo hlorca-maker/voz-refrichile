@@ -609,6 +609,12 @@
     var fecha = f.iso && M.diasHasta(f.iso) <= 0 ? f.iso : M.iso(M.hoy0());
     return { tipo: 'gestion', gtipo: gtipo, metodo: metodo, comentario: M.comentarioGestion(raw, f.iso && M.diasHasta(f.iso) <= 0 ? f : { usado: [] }, cli), detalle: raw, fecha: fecha, hora: '', titulo: '', clis: clis || [], cli: cli ? cli.r : '', cot: cot, origen: M.esEntrante(raw) ? 'Entrante' : 'Saliente' };
   };
+  // Con una gestion por confirmar, contar OTRA ("llamé a Frío Sur y...") no es una correccion: es una orden nueva.
+  M.esOtraGestion = function (b, texto, cartera) {
+    if (M.intencion(texto) !== 'gestion') return false;
+    var c = cartera ? cartera.buscar(texto)[0] : null;
+    return !!c && (c.r !== b.cli || String(texto).trim().split(/\s+/).length >= 5);
+  };
   // Correcciones dichas sobre una gestion por confirmar: "fue por WhatsApp", "es una visita", "fue ayer", "agrega que...", "sin comentario"
   M.corregirGestion = function (b, texto, cartera) {
     var n = ' ' + M.norm(texto) + ' ', cambios = [], f = M.leerFecha(texto), m;
