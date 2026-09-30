@@ -18,7 +18,7 @@
  */
 (function (raiz) {
   'use strict';
-  var M = { version: '2026-09-29' };
+  var M = { version: '2026-09-30' };
 
   // ------------------------------------------------------------------ utilidades
   M.norm = function (s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\/:.,]+/g, ' ').replace(/\s+/g, ' ').trim(); };
@@ -92,7 +92,7 @@
     cotiz: /\b(cotizaciones?( abiertas| pendientes)? (de|del|a|para)|que (le )?(tengo |he )?cotizad\w*|que le cotice)\b/,
     // 25-09-2026 (Humberto): productos cotizados a un cliente, mis ventas, mi meta y cuanto me falta
     cotizado: /\b(que (le |les )?(hemos |he |tengo |tiene |tenemos |les |le )?cotiz(ado|amos|aste|e)\b|productos?( \w+){0,2} cotizad\w*|tiene\w* cotizad\w*|que (hay|va|viene|tiene|trae) (en )?la cotizacion|detalle de (la )?cotizacion|que (le )?cotice|cotizado a|que le (estamos|estoy) cotizando)\b/,
-    ventas: /\b(mis ventas|cuant[oa]s? (se )?(lleva\w*|llevo|hemos|he|va|van|vamos|voy) (vendid\w*|facturad\w*)|cuanto (vendi|vendimos|vendio|facturamos|facture)\b|cuantas ventas|ventas? (de |del )?(hoy|mes|ano|semana)|como voy\b|como vamos\b|vendido (este|del|en el) (mes|ano)|vendido hoy|facturacion del mes|cuanto (llevo|vamos|voy) (en )?(el )?mes|cuanto (he|hemos) vendido|lo vendido|mi facturacion)\b/,
+    ventas: /\b(mis ventas|cuant[oa]s? (se )?(lleva\w*|llevo|hemos|he|va|van|vamos|voy) (vendid\w*|facturad\w*)|cuanto (vendi|vendimos|vendio|facturamos|facture)\b|cuantas ventas|ventas? (de |del )?(hoy|mes|ano|semana)|como voy\b|como vamos\b|vendido (este|del|en el) (mes|ano)|vendido hoy|facturacion del mes|cuanto (llevo|vamos|voy) (en )?(el )?mes|cuanto (he|hemos) vendido|lo vendido|mi facturacion|ventas? (total(es)?|acumulad\w*)|(total|acumulado) (vendido|de ventas?|facturado)|cuanto (llevamos|vamos|llevo|voy) (acumulad\w*|en el ano|en el mes|de ventas?)|cuanto (he|hemos|se ha) facturado|venta del (mes|ano)|acumulado (del|de este) (mes|ano)|cuanto va la venta)\b/,
     // compras de un cliente, cartera en riesgo y mejores clientes (25-09-2026)
     compras: /\b(cuanto (me |nos |le )?(ha|han|hemos|he) (comprado|vendido)|ultima compra|cuando (me |nos )?compro|que (me |nos )?(ha |han )?comprado|que compro\b|que le (hemos |he )?vendido|compras de|historial de compras|cuanto (me )?compra\b|cuanto (le )?(vendemos|vendo) a)\b/,
     riesgo: /\b(clientes? (en riesgo|sin compras?|que no (me |nos )?(compran?|han comprado)|perdidos?|dormidos?|inactivos?|que dejaron de comprar)|quien(es)? no (me |nos )?(ha |han )?compra\w*|a quien(es)? (tengo que |debo |deberia )?(visitar|llamar|contactar)|que clientes (visito|llamo|debo visitar)|no me han comprado|dejaron de comprar)\b/,
@@ -104,6 +104,8 @@
     cotvend: /\b(cotizaciones? (vendid\w*|perdid\w*|ganad\w*|cerrad\w*|nulas?|anulad\w*|emitid\w*|del (ano|mes)|de este (ano|mes)|(este|en el) (ano|mes)|historic\w*|anterior\w*|viej\w*|pasad\w*|que (se )?(vendi\w*|perdi\w*|gan\w*|cerr\w*)|que (le |les )?(hice|hicimos|he hecho|hemos hecho))|(cuantas|que) cotizaciones|tasa de (cierre|conversion|exito|efectividad)|efectividad|cuanto (he |hemos |llevo |llevamos |se ha |tengo )?cotiz\w*|historial de cotizaciones|cotizado (este|en el|del) (ano|mes)|(vendidas|perdidas) (este|en el|del) (mes|ano)|cuantas (he |hemos )?(vendido|perdido|ganado|cerrado))\b/,
     comparar: /\b((comparad\w*|comparativ\w*|comparar|compara|versus|vs|respecto|frente|contra) (a |al |el |con el |del |de |con )?(ano|mismo)|ano (pasado|anterior)|(mismo|misma) (periodo|fecha|mes) del ano|como (voy|vamos|estamos|estoy|va|van) (respecto|comparado|versus|frente|contra)|crecimos|crecimiento|crecido|creciendo|caimos|caida de ventas|a esta (fecha|altura) del ano|(mas|menos|mejor|peor) que el ano)\b/,
     docs: /\b(((ultimas?|que|cuantas|las|mis|dame las|dime las) )?(facturas?|notas? de credito|boletas?) (de|del|a|al|para|tiene|hay|hice|emiti|emitimos|se emitieron|hoy|de hoy|de ayer|esta semana|de esta semana|de la semana|le (hice|hicimos|emiti))|notas? de credito|(ultima|que|cuantas) (facturas?|boletas?)|documentos? (de venta|del cliente|de|del|emitidos) |factura (numero |n |nro |no |num )?\d{3,}|que (facture|facturamos|emitimos|hemos facturado|he facturado|se facturo) (hoy|ayer|esta semana)|que le (facture|facturamos|hemos facturado|he facturado))\b/,
+    // 30-09-2026 (Humberto): operacion: notas de venta pendientes, productos por despachar
+    nv: /\b(notas? de venta|pendientes? de (despacho|entrega|facturar|facturacion)|por (despachar|entregar|facturar)|que (tengo|hay|falta|queda) (por|para) (despachar|entregar|facturar)|despachos? pendientes?|entregas? pendientes?|sin (despachar|entregar|facturar)|(mis|las) (nv|enevés|notas))\b/,
     stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
     precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
     visita: /\b(visite|visitamos|estuve (con|en|donde)|fui (a|donde)|pase (a|por|donde)|me reuni|reunion con)\b/,
@@ -135,6 +137,7 @@
     if (R.hecha.test(n)) return 'hecha';
     if (R.pend.test(n)) return 'pend';
     if (R.meta.test(n)) return 'meta';
+    if (R.nv.test(n)) return 'nv';
     if (R.gestion.test(n) || M.esPasado(t)) return 'gestion';
     if (R.cotvend.test(n)) return 'cotvend';
     if (R.comparar.test(n)) return 'comparar';
@@ -171,13 +174,52 @@
     return M.capital(s.replace(/\s+/g, ' ').trim()).slice(0, 150);
   };
   M.cotizacionDe = function (t) { var m = M.norm(t).match(/cotizacion(?:es)?(?: (?:numero|nro|n|no))? ?(\d{3,7})/); return m ? m[1] : ''; };
+  // Numeros dictados dentro de un codigo: "cuatro diez a" = 410a, "cinco cero siete" = 507, "cuatrocientos cuatro" = 404,
+  // "treinta y dos" = 32. Solo se juntan cuando forman un codigo de refrigerante conocido o vienen tras "erre/refrigerante/gas".
+  var CENT = { cien: 100, ciento: 100, doscientos: 200, trescientos: 300, cuatrocientos: 400, quinientos: 500, seiscientos: 600 };
+  var DEC = { diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20, veintidos: 22, treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90 };
+  var UNI = { cero: 0, uno: 1, un: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9 };
+  M.REFRIG = /^(22|32|134a?|290|404a?|407[cf]?|410a?|417a?|422[ad]?|448a?|449a?|452a?|454[bc]?|507|513a?|600a?|1234yf|744)$/;
+  M.numHablado = function (s) {
+    var ws = s.split(' '), out = [], i = 0;
+    while (i < ws.length) {
+      var w = ws[i], n = null, j = i;
+      if (CENT[w] != null) { n = CENT[w]; j++; if (DEC[ws[j]] != null) { n += DEC[ws[j]]; j++; if (ws[j] === 'y' && UNI[ws[j + 1]] != null) { n += UNI[ws[j + 1]]; j += 2; } } else if (UNI[ws[j]] != null) { n += UNI[ws[j]]; j++; } }
+      else if (DEC[w] != null) { n = DEC[w]; j++; if (ws[j] === 'y' && UNI[ws[j + 1]] != null) { n += UNI[ws[j + 1]]; j += 2; } }
+      if (n != null) { out.push(String(n)); i = j; continue; }
+      // digitos sueltos seguidos ("cinco cero siete", "cuatro diez") solo si forman un refrigerante
+      if (UNI[w] != null) {
+        var k = i, d = '';
+        while (k < ws.length && (UNI[ws[k]] != null || (DEC[ws[k]] != null && DEC[ws[k]] < 100))) { d += String(UNI[ws[k]] != null ? UNI[ws[k]] : DEC[ws[k]]); k++; if (d.length >= 3) break; }
+        var letra = ws[k] === 'a' || ws[k] === 'c' ? ws[k] : '';
+        if (d.length >= 2 && M.REFRIG.test(d + letra)) { out.push(d); i = k; continue; }
+      }
+      out.push(w); i++;
+    }
+    return out.join(' ');
+  };
+  // "precio del R507 en lista distribuidor B", "en la lista mesón", "lista agentes": la lista pedida, si se dijo
+  M.listaDe = function (t) {
+    var n = ' ' + M.norm(t) + ' ';
+    if (/ (lista )?(agentes? plus|agente mas|plus) /.test(n)) return 'LAP';
+    if (/ (lista (de )?)?agentes? /.test(n)) return 'LAA';
+    if (/ (lista |distribuidor(es)? )(a|uno|1) |distribuidor(es)? lista a |lista distribuidor(es)? a /.test(n)) return 'L2A';
+    if (/ (lista |distribuidor(es)? )(b|dos|2) |lista distribuidor(es)? b /.test(n)) return 'L2B';
+    if (/ (lista |distribuidor(es)? )(c|tres|3) |lista distribuidor(es)? c /.test(n)) return 'L2C';
+    if (/ (lista )?(meson|mesón|publico|de meson) /.test(n)) return 'L2M';
+    if (/ cosmoplas /.test(n)) return 'LC2';
+    return '';
+  };
   M.productoDe = function (t, cli) {
-    var s = ' ' + M.norm(t) + ' ';
+    var s = ' ' + M.numHablado(M.norm(t)) + ' ';
+    s = s.replace(/ (en |de |para |con |a |al )?(la |el )?(lista( de precios?)?|precio) (de |del )?(distribuidor(es)? )?(a|b|c|uno|dos|tres|1|2|3|meson|mesón|publico|agentes?( plus)?|plus|cosmoplas)(?= )/g, ' ')
+      .replace(/ (en |de |para |a )?(la )?lista (de precios? )?(distribuidor(es)? )?(?= )/g, ' ').replace(/ distribuidor(es)? (a|b|c)(?= )/g, ' ');
     s = s.replace(/ (dame|dime|me das|me dices|quiero|necesito|consulta(r)?|cual es|el|la|los|las)( | el | la )/g, ' ');
     s = s.replace(/ (precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|a cuanto|valor (de|del)|stock|hay stock|hay disponible|disponibilidad|cuant[oa]s? (hay|quedan|tenemos)|tenemos|tienen|tengo) /g, ' ');
     if (cli && cli._t) { cli._t.forEach(function (w) { s = s.replace(new RegExp(' ' + w + ' ', 'g'), ' '); }); s = s.replace(/ (para|a|al|del|de) (cliente )?\s*$/, ' '); s = s.replace(/ para (el cliente )?$/, ' '); }
     s = s.replace(/ erre /g, ' r ').replace(/ r ?-? ?(\d{2,3}) ?([a-z])?(?= )/g, function (x, n, l) { return ' r' + n + (l || '') + ' '; });
     s = s.replace(/ (refrigerante|gas|bombona|freon) (\d{2,3}[a-z]?)(?= )/g, ' $1 r$2 ');       // "refrigerante 507" = r507
+    s = s.replace(/ (\d{2,4}) ?([ac])?(?= )/g, function (x, n, l) { return M.REFRIG.test(n + (l || '')) ? ' r' + n + (l || '') + ' ' : x; });   // "el 507", "410 a" solos
     s = s.replace(/ (dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta)(?= )/g, function (x, w) { return ' ' + NUM[w]; });
     s = s.replace(/(\d) (coma|punto) (\d)/g, '$1.$3').replace(/(\d) y medi[oa](?= )/g, '$1.5');
     return s.replace(/ (de|del|para|el|la|un|una)(?= )/g, ' ').replace(/ (de|del|para|el|la|un|una)(?= )/g, ' ').replace(/\s+/g, ' ').trim();
@@ -187,7 +229,7 @@
   var SUF = ' ltda limitada spa sa s.a eirl e.i.r.l sociedad soc cia y e hijos el la los las de del al en con por para un una ';
   // Palabras de la orden que no son parte de un nombre de cliente ("tengo" casi calzaba con "Rengo").
   var STOP_Q = ' tengo tienes tiene tenemos que cuando como donde quien cual hora dia llamar llamarlo llamarla llamarle llamo llame llama hablar visitar visite enviar mandar precio precios stock telefono fono correo direccion cotizacion cotizaciones recuerdame recordatorio tarea nota anota manana hoy pasado semana mes para por con del las los una uno dos tres cuatro cinco seis siete ocho nueve diez cliente empresa datos ficha contacto marca marcar hecha hecho lista mejor sobre '
-    + 'ese esa eso esto este esta estos estas aquel aquella puedes podrias quiero necesito quisiera guardar guardame agregar agregame crear creame registrar poner ponme favor recordar recordarme avisame hola gracias buenas buenos dias tardes noches busca buscar buscame dame dime muestrame aviso alarma pendiente pendientes '
+    + 'ese esa eso esto este esta estos estas aquel aquella puedes podrias quiero necesito quisiera guardar guardame agregar agregame crear creame registrar poner ponme favor recordar recordarme avisame hola gracias buenas buenos dias tardes noches busca buscar buscame dame dime muestrame aviso alarma pendiente pendientes despachar despacho despachos entregar entrega entregas facturar nota notas venta lista producto productos '
     + 'gestion gestiones registra registrar registrame llame hable converse conversamos hablamos visite estuve fui reuni contacte cotice escribi mande envie quedo quedamos quede acordamos acorde ayer anteayer facturas factura facture facturamos notas credito documentos documento boleta vendidas perdidas ganadas cerradas abiertas comparado comparar versus anterior ultima ultimo ultimas ultimos historial seguimiento hice hicimos paso whatsapp mail tasa cierre cuantas cuantos cuanto cotizado cotizamos emitidas ano respecto ';
   function tokensCli(n) { return M.norm(n).replace(/[.,\-]/g, ' ').split(' ').filter(function (w) { return w.length > 2 && SUF.indexOf(' ' + w + ' ') < 0; }); }
   M.tokensCli = tokensCli;
@@ -243,7 +285,7 @@
 
   // ------------------------------------------------------------------ copia de datos (accion "datos" de la API)
   var STOP_P = ' de del la el los las un una para por con y a al en que precio precios cuanto cuesta sale vale valor stock hay tenemos quedan dame dime el la me ';
-  M.Datos = function () { this.t = 0; this.hora = ''; this.dolar = 0; this.listas = {}; this.cols = ['PrecioBase', 'LAP', 'LAA', 'L2A', 'L2B', 'L2C', 'L2M']; this.reglas = { vig: 5, cal: 14 }; this.prod = []; this.cliMap = {}; this.cli = []; this.cot = []; this.tareas = []; this.gest = []; this.vend = {}; this.cod = ''; this.todos = false; };
+  M.Datos = function () { this.t = 0; this.hora = ''; this.dolar = 0; this.listas = {}; this.cols = ['PrecioBase', 'LAP', 'LAA', 'L2A', 'L2B', 'L2C', 'L2M']; this.reglas = { vig: 5, cal: 14 }; this.prod = []; this.cliMap = {}; this.cli = []; this.cot = []; this.tareas = []; this.gest = []; this.vend = {}; this.cod = ''; this.todos = false; this.nv = []; };
   M.Datos.prototype.usar = function (o, t) {
     this.t = t || Date.now(); this.hora = o.hora || ''; this.dolar = o.dolar || 0; this.listas = o.listas || {}; this.cols = o.listaCols || this.cols; this.reglas = o.reglas || this.reglas;
     this.prod = (o.prod || []).map(function (p) {
@@ -258,6 +300,8 @@
     var prov = (this.gest || []).filter(function (g) { return /^prov-/.test(g.folio || ''); });
     this.gest = prov.concat((o.gest || []).map(function (g) { return { f: g[0], rut: g[1], n: g[2], tipo: g[3], met: g[4], cot: g[5], contacto: g[6], com: g[7], vc: g[8], folio: g[9] }; }));
     this.vend = o.vend || {}; this.cod = o.cod || ''; this.todos = !!o.todos; this.gestProd = !!o.gestProd;
+    // Notas de venta abiertas [numero, fecha, rut, cliente, estado (sinfac|parcial|entregar), dias, neto, por facturar, por entregar, [[producto, por entregar, por facturar]]]
+    this.nv = o.nv == null ? null : (o.nv || []).map(function (x) { return { n: x[0], f: x[1], rut: x[2], cli: x[3], est: x[4], d: x[5], neto: x[6], porFac: x[7], porEnt: x[8], lineas: (x[9] || []).map(function (l) { return { desc: l[0], porEnt: l[1], porFac: l[2] }; }) }; });
     return this;
   };
   M.Datos.prototype.usarVentas = function (v, t) {
@@ -350,7 +394,7 @@
         else if (fs.some(function (w) { return it._t.indexOf(w) >= 0 || it._c.indexOf(w) >= 0; })) sc += 1.5;
         else todas = false;
       });
-      if (gas && /refrigerante|\bgas\b|bombona|\bkg\b|cilindro/.test(it._t)) sc += 3;
+      if (gas && sc > 0 && /refrigerante|bombona|cilindro/.test(it._t) && !/recuperad|bomba|arbol|manguera|manometro|cortador|detector/.test(it._t)) sc += 3;   // solo si el codigo calzo: un R507 que no existe no es un R32   // el gas en si, no la recuperadora ni el arbol "R410A"
       if (it._cod === qn) sc += 10;
       if (todas) sc += 3;
       if (sc >= Math.max(2, tks.length)) res.push({ it: it, sc: sc });
@@ -428,6 +472,20 @@
     return (this.gest || []).filter(function (g) { return g.rut === rut || (n && !g.rut && M.tokensCli(g.n).join(' ') === n); });
   };
   M.Datos.prototype.gestionesPeriodo = function (periodo) { var r = M.rango(periodo || 'hoy'); return (this.gest || []).filter(function (g) { return g.f >= r.desde && g.f <= r.hasta; }); };
+  // Notas de venta pendientes: sub 'despacho' (facturadas, por entregar), 'facturar' (sin facturar o parcial), o todas. rut: solo de ese cliente.
+  M.Datos.prototype.notasVenta = function (sub, rut) {
+    return (this.nv || []).filter(function (x) { return (!rut || x.rut === rut) && (sub === 'despacho' ? x.porEnt > 0 : sub === 'facturar' ? x.porFac > 0 : true); }).sort(function (a, b) { return b.d - a.d; });
+  };
+  M.nvTxt = function (sub, lista, nombre, sinDatos) {
+    if (sinDatos) return 'No tengo las notas de venta en el teléfono.';
+    var que = sub === 'despacho' ? 'por despachar' : sub === 'facturar' ? 'por facturar' : 'pendientes';
+    if (!lista.length) return (nombre ? nombre + ' no tiene' : 'No tienes') + ' notas de venta ' + que + '.';
+    function una(x) {
+      var ls = x.lineas.filter(function (l) { return sub === 'facturar' ? l.porFac > 0 : l.porEnt > 0 || (sub !== 'despacho' && l.porFac > 0); }).slice(0, 3);
+      return 'la ' + x.n + (nombre ? '' : ' de ' + x.cli) + ', de hace ' + x.d + (x.d === 1 ? ' día' : ' días') + (ls.length ? ': ' + ls.map(function (l) { var q = sub === 'facturar' ? l.porFac : (l.porEnt || l.porFac); return q + ' ' + l.desc.toLowerCase(); }).join(', ') + (x.lineas.length > 3 ? ' y más' : '') : '');
+    }
+    return (nombre ? nombre + ' tiene ' : 'Tienes ') + lista.length + (lista.length === 1 ? ' nota de venta ' : ' notas de venta ') + que + ': ' + lista.slice(0, 3).map(una).join('; ') + (lista.length > 3 ? '; y ' + (lista.length - 3) + ' más' : '') + '.';
+  };
   M.Datos.prototype.cotHist = function (rut) { var c = this.comprasDe(rut); return c ? c.cots || [] : []; };
   M.Datos.prototype.docsDe = function (rut) { var c = this.comprasDe(rut); return c ? c.docsL || [] : []; };
   M.Datos.prototype.docsPeriodo = function (periodo) {
@@ -541,6 +599,12 @@
         if (v.equipo && v.vendedores) v.vendedores.forEach(function (x) { o.filas.push({ n: x.nombre, s: 'año a la fecha contra el anterior', v: P(x.anio), vs: pct(x.anio, x.ytdP) }); });
         o.dicho = M.comparaTxt(datos.ventas);
       }
+    } else if (r.tipo === 'nv') {
+      var nvs = r.resultado || [], que = r.sub === 'despacho' ? 'por despachar' : r.sub === 'facturar' ? 'por facturar' : 'pendientes';
+      o.titulo = 'Notas de venta ' + que + ' · ' + nvs.length;
+      o.filas = nvs.slice(0, 8).map(function (x) { return { n: 'NV ' + x.n + (r.cli ? '' : ' · ' + x.cli), s: x.lineas.slice(0, 3).map(function (l) { return (r.sub === 'facturar' ? l.porFac : (l.porEnt || l.porFac)) + ' ' + l.desc; }).join(' · ') + (x.lineas.length > 3 ? ' · …' : ''), v: P(x.neto), vs: 'hace ' + x.d + ' d', rut: x.rut }; });
+      if (!nvs.length) o.nota = datos.nv ? 'Nada pendiente.' : 'No tengo las notas de venta en el teléfono.';
+      o.dicho = M.nvTxt(r.sub, nvs, r.cli ? r.cli.n : '', !datos.nv);
     } else if (r.tipo === 'docs') {
       var ds = r.cli ? datos.docsDe(r.cli.r) : r.folio ? [datos.docPorFolio(r.folio)].filter(Boolean) : datos.docsPeriodo(r.periodo);
       o.titulo = (r.cli || r.folio ? 'Documentos' : 'Documentos de ' + M.periodoTxt[r.periodo === 'hoy' || r.periodo === 'ayer' ? r.periodo : 'semana']) + ' · ' + ds.length;
@@ -674,6 +738,12 @@
     var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
     if (tipo === 'pend') return { tipo: 'pend' };
     if (tipo === 'ventas' || tipo === 'meta') return { tipo: tipo, resultado: datos.ventas || null, periodo: / hoy /.test(n) ? 'hoy' : / (esta |la )?semana /.test(n) ? 'semana' : '' };
+    if (tipo === 'nv') {
+      var subNv = / (despach\w*|entreg\w*) /.test(n) ? 'despacho' : / factur\w* /.test(n) ? 'facturar' : '';
+      var cliNv = cli && claro && (nombrado || / (de|del) /.test(n)) ? cli : null;                   // "notas de venta de X"; sin cliente dicho, todas
+      if (cli && !claro && nombrado) return { tipo: 'elegir', clis: clis, para: 'nv' };
+      return { tipo: 'nv', sub: subNv, cli: cliNv, resultado: datos.nv ? datos.notasVenta(subNv, cliNv ? cliNv.r : '') : null };
+    }
     if (tipo === 'gestion' || tipo === 'visita') {
       if (!cli) { clis = cartera.buscar(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }
       var bg = M.gestionDe(texto, clis); if (cli && !claro) bg.cli = '';
@@ -710,10 +780,13 @@
     }
     if (tipo === 'precio' || tipo === 'stock') {
       if (cli && !claro && nombrado) return { tipo: 'ia', motivo: 'cliente ambiguo', clis: clis };
+      var lista = tipo === 'precio' ? M.listaDe(texto) : '';
+      if (lista) { cli = null; claro = false; }                                                   // "en lista B": la lista manda, no el cliente
       var q = M.productoDe(texto, tipo === 'precio' && claro ? cli : null);
       if (!q) return { tipo: 'ia', motivo: 'sin producto' };
-      var c1 = claro ? cli : null, o = datos.t ? (tipo === 'precio' ? datos.precio(q, c1) : datos.stock(q)) : null;
-      return { tipo: tipo, q: q, cli: c1, resultado: o, consulta: { accion: tipo, q: q, rut: c1 ? c1.r : '', texto: texto } };
+      var c1 = claro ? cli : (lista ? { r: '', n: '', l: lista } : null), o = datos.t ? (tipo === 'precio' ? datos.precio(q, c1) : datos.stock(q)) : null;
+      if (o && lista) o.cliente = '';
+      return { tipo: tipo, q: q, cli: claro ? cli : null, lista: lista, resultado: o, consulta: { accion: tipo, q: q, rut: claro ? cli.r : '', lista: lista, texto: texto } };
     }
     if (tipo === 'contacto' || tipo === 'cotiz' || tipo === 'llamar') {
       if (!cli) { clis = cartera.buscar(texto, true); cli = clis[0] || null; claro = !!cli && clis.length === 1; }

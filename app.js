@@ -293,7 +293,7 @@ function buscarProd(q, tipo, max) {
       else if (fs.some(function (w) { return it._t.indexOf(w) >= 0 || it._c.indexOf(w) >= 0; })) sc += 1.5;
       else todas = false;
     });
-    if (gas && /refrigerante|\bgas\b|bombona|\bkg\b|cilindro/.test(it._t)) sc += 3;
+    if (gas && sc > 0 && /refrigerante|bombona|cilindro/.test(it._t) && !/recuperad|bomba|arbol|manguera|manometro|cortador|detector/.test(it._t)) sc += 3;   // solo si el codigo calzo: un R507 que no existe no es un R32   // el gas en si, no la recuperadora ni el arbol "R410A"
     if (it._cod === qn) sc += 10;
     if (todas) sc += 3;
     if (sc >= Math.max(2, tks.length)) res.push({ it: it, sc: sc });
@@ -356,13 +356,13 @@ function rapido(texto) {
   var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
   if (tipo === 'pend') { $('vivo').textContent = texto; verPendientes(true); return true; }
   // Gestiones, cotizaciones por estado, ano anterior y documentos (28-09-2026): lo resuelve el motor.
-  if (/^(gestion|visita|gestiones|cotvend|comparar|docs)$/.test(tipo)) {
+  if (/^(gestion|visita|gestiones|cotvend|comparar|docs|nv)$/.test(tipo)) {
     var rm = M.interpretar(texto, { datos: DM, cartera: CM });
     if (rm.tipo === 'ia') return false;
     $('vivo').textContent = texto;
     if (rm.tipo === 'elegir') elegirCliente(rm.clis, rm.para);
     else if (rm.tipo === 'borrador') tarjetaGestion(rm.borrador);
-    else if (rm.tipo === 'gestiones') verVista(rm);
+    else if (rm.tipo === 'gestiones' || rm.tipo === 'nv') verVista(rm);
     else conVentas(function () { verVista(rm); }, true);
     return true;
   }

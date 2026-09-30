@@ -120,7 +120,7 @@
           return this.confirmar(p.borrador);
         }
       } else if (p.tipo === 'confirmar' && p.borrador.tipo === 'gestion') {
-        var bg = p.borrador, itg = M.intencion(texto), otra = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado|recordatorio)$/.test(itg) || M.esOtraGestion(bg, texto, this.cartera);
+        var bg = p.borrador, itg = M.intencion(texto), otra = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado|recordatorio|nv)$/.test(itg) || M.esOtraGestion(bg, texto, this.cartera);
         if (!otra) {
           if (M.corregirGestion(bg, texto, this.cartera).length) return M.gestPideCot(bg) ? this.seguirGestion(bg) : this.confirmar(bg, true);
           s = M.siNo(texto);
@@ -200,6 +200,7 @@
       if (!r.resultado) return 'Todavía no tengo las gestiones en el teléfono; dame unos segundos.';
       return r.cli ? M.gestionesTxt(r.cli.n, r.resultado) : M.gestPeriodoTxt(r.periodo, r.resultado, this.datos.todos);
     }
+    if (r.tipo === 'nv') { if (r.cli) this.ult.cli = r.cli; return M.nvTxt(r.sub, r.resultado || [], r.cli ? r.cli.n : '', !this.datos.nv); }
     if (r.tipo === 'cotvend' || r.tipo === 'comparar' || r.tipo === 'docs') {
       var selfV = this; if (r.cli) this.ult.cli = r.cli;
       return this.conVentas(function () {

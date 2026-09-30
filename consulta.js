@@ -102,7 +102,9 @@
     var $ = function (s) { return el.querySelector(s); }, input = $('input'), sug = $('.vc-sug'), res = $('.vc-res'), bX = $('.vc-ib.x'), bMic = $('.vc-ib.mic'), pieT = $('.vc-pie-t');
 
     // ---------------------------------------------------------------- datos en el telefono
-    function pie() { pieT.textContent = datos.t ? 'Datos de las ' + M.horaTxt(datos.t) + (navigator.onLine === false ? ' · sin señal' : '') : (navigator.onLine === false ? 'Sin señal y sin datos guardados' : 'Cargando datos…'); }
+    var ERR_DATOS = '';
+    function pie() { pieT.textContent = datos.t ? 'Datos de las ' + M.horaTxt(datos.t) + (navigator.onLine === false ? ' · sin señal' : '') : (navigator.onLine === false ? 'Sin señal y sin datos guardados' : ERR_DATOS ? 'Sin datos: ' + ERR_DATOS : 'Cargando datos…'); }
+    function fase(f) { if (opc.alFase) { try { opc.alFase(f); } catch (e) {} } }
     function usarDatos(o, t) {
       datos.usar(o, t); cartera.cargar(datos.clientes());
       var hechas = cola.hechasPendientes(), prov = PEND.filter(function (x) { return /^prov-/.test(x.id); });
@@ -114,8 +116,8 @@
       if (!forzar && Date.now() - datos.t < 20 * 60000) return;
       pidiendo = true; pie();
       api.llamar('datos', {}, { fondo: true, plazo: 150000, releer: 3 }).then(function (o) {
-        pidiendo = false; if (o.ok) { usarDatos(o); alm.set('datos', { t: Date.now(), o: o }); api.llamar('ventas', {}, { fondo: true, plazo: 150000, releer: 2 }).then(function (v) { if (v.ok) { datos.usarVentas(v); alm.set('ventas', { t: Date.now(), v: v }); } }).catch(function () {}); } pie();
-      }, function () { pidiendo = false; pie(); });
+        pidiendo = false; if (o.ok) { ERR_DATOS = ''; usarDatos(o); alm.set('datos', { t: Date.now(), o: o }); api.llamar('ventas', {}, { fondo: true, plazo: 150000, releer: 2 }).then(function (v) { if (v.ok) { datos.usarVentas(v); alm.set('ventas', { t: Date.now(), v: v }); } }).catch(function () {}); } pie();
+      }, function (e) { pidiendo = false; ERR_DATOS = (e && e.message) || M.errTxt(e); pie(); });
     }
     function cargarPend(cb) {
       api.llamar('pendientes', {}, { fondo: !cb }).then(function (o) {
@@ -352,6 +354,7 @@
       if (r.tipo === 'saludo' || r.tipo === 'ayuda') { var m0 = r.tipo === 'saludo' ? 'Hola. ¿Qué necesitas? Precios, stock, datos de un cliente, tus pendientes o un recordatorio.' : 'Puedo decirte precio y stock de un producto; teléfono, dirección, cotizaciones, compras, facturas y gestiones de un cliente; tus ventas, tu meta y cómo vas contra el año pasado; tus pendientes; y registrar gestiones, recordatorios, tareas y notas. Por ejemplo: “llamé a Clima Norte y quedó en enviar la orden”, “qué hablé con Refritec”, “últimas facturas de Frío Sur”.'; pintar(card(r.tipo === 'saludo' ? 'Hola' : 'Qué puedo hacer', '<div class="vc-nota">' + esc(m0) + '</div>')); decir(m0); return; }
       if (r.tipo === 'pend') return cardPend(true);
       if (r.tipo === 'gestiones') return r.resultado ? cardVista(r) : aviso('Todavía no tengo las gestiones en este equipo.', true);
+      if (r.tipo === 'nv') return cardVista(r);
       if (r.tipo === 'cotvend' || r.tipo === 'comparar' || r.tipo === 'docs') return conVentas(function () { cardVista(r); }, true);
       if (r.tipo === 'ventas' || r.tipo === 'meta') return cardVentas(r.tipo, r.periodo);
       if (r.tipo === 'riesgo' || r.tipo === 'mejores' || r.tipo === 'compras') return conVentas(function () {
@@ -440,16 +443,20 @@
     var hablar = opc.hablar != null ? opc.hablar : micPermitido;
     function decir(t) {
       if (!hablar || !raiz.speechSynthesis || !t) return;
-      try { speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance(t.replace(/\$/g, '').replace(/(\d)\.(\d{3})/g, '$1$2')); u.lang = 'es-CL'; u.rate = 1.05; speechSynthesis.speak(u); } catch (e) {}
+      try {
+        speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance(t.replace(/\$/g, '').replace(/(\d)\.(\d{3})/g, '$1$2')); u.lang = 'es-CL'; u.rate = 1.05;
+        fase('hablando'); var fin = function () { fase(''); }; u.onend = fin; u.onerror = fin; setTimeout(fin, Math.min(60000, 2500 + t.length * 90));
+        speechSynthesis.speak(u);
+      } catch (e) { fase(''); }
     }
     function escuchar() {
       if (escuchando) { try { rec.stop(); } catch (e) {} return; }
       rec = new SR(); rec.lang = 'es-CL'; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
       var fin = '';
-      rec.onstart = function () { escuchando = true; bMic.classList.add('on'); input.placeholder = 'Te escucho…'; };
+      rec.onstart = function () { escuchando = true; bMic.classList.add('on'); input.placeholder = 'Te escucho…'; fase('escuchando'); };
       rec.onresult = function (ev) { var t = ''; for (var i = ev.resultIndex; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) fin += ev.results[i][0].transcript; } input.value = fin || t; };
       rec.onerror = function (ev) { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') aviso('Permite el micrófono para usar la voz.', true); };
-      rec.onend = function () { escuchando = false; bMic.classList.remove('on'); input.placeholder = opc.placeholder || 'Precio, stock, cliente, pendientes…'; var t = (fin || input.value).trim(); if (t) { input.value = ''; procesar(t); } };
+      rec.onend = function () { escuchando = false; bMic.classList.remove('on'); input.placeholder = opc.placeholder || 'Precio, stock, cliente, pendientes…'; var t = (fin || input.value).trim(); if (t) { fase('pensando'); input.value = ''; procesar(t); if (!raiz.speechSynthesis || !speechSynthesis.speaking) setTimeout(function () { if (!speechSynthesis.speaking) fase(''); }, 400); } else fase(''); };
       try { rec.start(); } catch (e) {}
     }
     if (micPermitido) { bMic.hidden = false; bMic.onclick = function () { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); }; }
@@ -497,7 +504,7 @@
 
     return {
       consultar: procesar, refrescar: function () { pedirDatos(true); }, enfocar: function () { input.focus(); },
-      datos: datos, cartera: cartera,
+      datos: datos, cartera: cartera, escuchar: function () { if (micPermitido) { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); } },
       destruir: function () { clearInterval(reloj); el.innerHTML = ''; el.classList.remove('vc'); }
     };
   }
