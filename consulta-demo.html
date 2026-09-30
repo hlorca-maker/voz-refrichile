@@ -76,6 +76,7 @@ nav.tabs a{flex:1;text-align:center;font-size:11px;color:var(--text-muted);text-
   if (m) { try { localStorage.setItem('voz_t', JSON.stringify(m[1])); } catch (e) {} history.replaceState(null, '', location.pathname + location.search); }
   VozConsulta.montar(document.getElementById('consulta'), {
     api: 'https://script.google.com/macros/s/AKfycbw4Ax55jS8OKCvICEFsbYSiOWvlbgcuboILiwc4VYq92y_IcrgbMBnAK1LEUKvaVa_Omg/exec',
+    pwa: 'https://hlorca-maker.github.io/voz-refrichile/',   // fuera de Refrichile Central, el boton de microfono abre la app de voz independiente
     alAbrirCliente: function (rut, c) { alert('Aquí el CRM abriría la ficha de ' + (c ? c.n : rut)); }
   });
 </script>

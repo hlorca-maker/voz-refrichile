@@ -9,8 +9,8 @@
  *
  * COMO SE INCORPORA (por ejemplo en una pagina de Apps Script / HtmlService):
  *   <div id="consulta"></div>
- *   <script src="https://hlorca-maker.github.io/voz-refrichile/motor.js"></script>
- *   <script src="https://hlorca-maker.github.io/voz-refrichile/consulta.js"></script>
+ *   <script src="motor.js"></script>
+ *   <script src="consulta.js"></script>
  *   <script>
  *     VozConsulta.montar(document.getElementById('consulta'), {
  *       api: 'https://script.google.com/macros/s/.../exec',   // la API de voz
@@ -453,7 +453,7 @@
       try { rec.start(); } catch (e) {}
     }
     if (micPermitido) { bMic.hidden = false; bMic.onclick = function () { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); }; }
-    else if (opc.pwa !== false) { bMic.hidden = false; bMic.title = 'Hablar (abre Voz Refrichile)'; bMic.setAttribute('aria-label', 'Hablar (abre Voz Refrichile)'); bMic.onclick = function () { raiz.open((opc.pwa || 'https://hlorca-maker.github.io/voz-refrichile/') + '?mic=1', '_blank', 'noopener'); }; }
+    else if (opc.pwa) { bMic.hidden = false; bMic.title = 'Hablar (abre Voz Refrichile)'; bMic.setAttribute('aria-label', 'Hablar (abre Voz Refrichile)'); bMic.onclick = function () { raiz.open(opc.pwa + '?mic=1', '_blank', 'noopener'); }; }
 
     // ---------------------------------------------------------------- eventos
     $('form').onsubmit = function (ev) { ev.preventDefault(); var b = sel >= 0 ? sug.querySelectorAll('.vc-s')[sel] : null; if (b) return elegir(b); var t = input.value.trim(); input.value = ''; bX.hidden = true; input.blur(); procesar(t); };
