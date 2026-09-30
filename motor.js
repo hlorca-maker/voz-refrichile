@@ -455,6 +455,7 @@
   function cuantas(k, s, p) { return k + ' ' + (k === 1 ? s : p); }
   M.cotHistTxt = function (v, periodo) {
     if (!v || !v.cot) return 'Todavía no tengo las cotizaciones.';
+    if (periodo !== 'anio' && !v.cot.mes) periodo = 'anio';                                   // la app del CRM solo trae el ano
     var c = v.cot[periodo === 'anio' ? 'anio' : 'mes'] || [], tot = (c[0] || 0) + (c[2] || 0) + (c[4] || 0), cerr = (c[2] || 0) + (c[4] || 0), per = periodo === 'anio' ? 'Este año' : 'Este mes';
     if (!tot) return per + ' no hay cotizaciones emitidas.';
     return per + (v.equipo ? ' el equipo emitió ' : ' emitiste ') + cuantas(tot, 'cotización', 'cotizaciones') + ' por ' + M.plataTxt(c[1] + c[3] + c[5]) + ': ' + cuantas(c[2], 'vendida', 'vendidas') + (c[2] ? ' por ' + M.plataTxt(c[3]) : '') + ', '
@@ -480,6 +481,7 @@
   };
   M.comparaCliTxt = function (nombre, c) {
     if (!c || (!c.anio && !c.ytdP)) return nombre + ' no tiene compras este año ni el anterior a esta fecha.';
+    if (!c.anio) return nombre + ' no ha comprado este año; el año pasado a esta fecha iba en ' + M.plataTxt(c.ytdP) + '.';
     return nombre + ' lleva ' + M.plataTxt(c.anio) + ' este año, ' + M.variaTxt(c.anio, c.ytdP) + (c.ytdP ? ', que a esta fecha iba en ' + M.plataTxt(c.ytdP) : '') + '.';
   };
   function docTxt(d) { return (d.tipo === 'N' ? 'nota de crédito ' : 'factura ') + d.folio + ' de ' + M.haceTxt(d.f) + (d.nombre ? ' a ' + d.nombre : '') + ' por ' + M.plataTxt(Math.abs(d.monto)); }
@@ -521,6 +523,7 @@
         o.filas = cs.map(function (q) { return { n: 'N° ' + q.folio, s: M.capital(M.haceTxt(q.f)), v: P(q.monto), vs: EST_TXT[q.e] || '' }; });
         if (!cs.length) o.nota = 'Sin cotizaciones este año.'; o.dicho = M.cotHistCliTxt(r.cli.n, cs);
       } else {
+        if (r.periodo !== 'anio' && v.cot && !v.cot.mes) r.periodo = 'anio';
         var c = (v.cot || {})[r.periodo === 'anio' ? 'anio' : 'mes'] || [0, 0, 0, 0, 0, 0, 0, 0], cerr = c[2] + c[4];
         o.titulo = 'Cotizaciones ' + (r.periodo === 'anio' ? 'del año' : 'del mes'); o.etiqueta = v.equipo ? 'Equipo' : '';
         o.filas = [{ n: 'Vendidas', s: c[2] + ' cotizaciones', v: P(c[3]) }, { n: 'Perdidas', s: c[4] + ' cotizaciones', v: P(c[5]) }, { n: 'Abiertas', s: c[0] + ' cotizaciones', v: P(c[1]) },
@@ -786,6 +789,8 @@
     this.tope = opc.tope || 35000; this.plazo = opc.plazo || 75000; this.pausa = { corta: 800, larga: 15000 };
     this.alSinClave = opc.alSinClave || function () {};
     this.fetch = opc.fetch || (typeof fetch === 'function' ? fetch.bind(raiz) : null);
+    // puente (30-09-2026): dentro de la app del CRM no se llama a esta API; cada accion la resuelve la app con su sesion.
+    if (opc.puente) this.una = function (accion, datos) { return Promise.resolve().then(function () { return opc.puente(accion, datos); }); };
     this.cola = []; this.vuelo = { u: 0, e: 0, f: 0 };
   };
   M.Api.RELEER = { inicio: 1, calentar: 1, pendientes: 1, configIA: 1, datos: 1, ventas: 1, gestiones: 1 };

@@ -15,6 +15,7 @@
  *     VozConsulta.montar(document.getElementById('consulta'), {
  *       api: 'https://script.google.com/macros/s/.../exec',   // la API de voz
  *       clave: '<?= claveVozDeLaPersona ?>',                 // su clave personal (la misma del enlace de la app)
+ *       // o, dentro de Refrichile Central: puente: function (accion, datos) {...} resuelve cada accion con la sesion de la app (ver voz-puente.js)
  *       alAbrirCliente: function (rut) { irAFichaDelCrm(rut); } // opcional: enganches con el CRM
  *     });
  *   </script>
@@ -85,7 +86,7 @@
     opc = opc || {}; ponerCss();
     var alm = M.almacen(opc.prefijo || 'voz_'), datos = new M.Datos(), cartera = new M.Cartera(), PEND = [], PEND_T = 0, IA = opc.ia !== false;
     var clave = function () { return typeof opc.clave === 'function' ? opc.clave() : (opc.clave || alm.get('t', '')); };
-    var api = new M.Api({ url: opc.api, clave: clave, alSinClave: function () { pintar(card('Acceso', '<div class="vc-nota err">La clave de acceso no es válida. Pide tu enlace de Voz Refrichile nuevamente.</div>')); } });
+    var api = new M.Api({ url: opc.api, puente: opc.puente, clave: clave, alSinClave: function () { pintar(card('Acceso', '<div class="vc-nota err">La clave de acceso no es válida. Pide tu enlace de Voz Refrichile nuevamente.</div>')); } });
     var cola = new M.Cola(api, alm, { alListo: colaListo, alFallo: colaFallo });
     var CHAT = [], BORR = null, HECHA = null, sel = -1, timer = null, pidiendo = false, rec = null, escuchando = false;
 
