@@ -414,7 +414,7 @@
   // Como se dice una gestion: "llamado", "WhatsApp", "visita", "cotización por correo"
   M.gestTxt = function (tipo, met) {
     var t = M.norm(tipo), m = M.norm(met);
-    var via = /telef|llam/.test(m) ? 'por teléfono' : /whats/.test(m) ? 'por WhatsApp' : /mail|correo/.test(m) ? 'por correo' : /refrichile/.test(m) ? 'en Refrichile' : /presencial/.test(m) ? 'en terreno' : '';
+    var via = /telef|llam/.test(m) ? 'por teléfono' : /video/.test(m) ? 'por videollamada' : /whats/.test(m) ? 'por WhatsApp' : /mail|correo/.test(m) ? 'por correo' : /refrichile/.test(m) ? 'en Refrichile' : /presencial/.test(m) ? 'en terreno' : '';
     var que = { contacto: '', contactado: '', llamado: 'llamado', whatsapp: 'WhatsApp', correo: 'correo', cotizacion: 'cotización', cotizado: 'cotización', 'seguimiento cotizacion': 'seguimiento de cotización', 'toma de pedido': 'toma de pedido',
       reunion: 'reunión', visita: 'visita', postventa: 'postventa', cobranza: 'cobranza', prospeccion: 'prospección', facturado: 'facturación' }[t];
     if (que == null) que = tipo ? String(tipo).toLowerCase() : '';
@@ -498,8 +498,11 @@
 
   /* Lo que se MUESTRA de una consulta de gestiones, cotizaciones, ano anterior o documentos, sin pantalla: titulo, filas
      {n, s, v, vs, rut} y lo que se dice. Cada pantalla (la app, la consulta del CRM) lo pinta con sus propios estilos. */
-  M.GEST_TIPOS = ['Contacto', 'Cotización', 'Seguimiento cotización', 'Toma de pedido', 'Reunión', 'Postventa', 'Cobranza', 'Prospección', 'Otro'];
-  M.GEST_METODOS = ['Teléfono', 'WhatsApp', 'Email', 'Presencial en cliente', 'Presencial en Refrichile'];
+  // Los mismos valores que el CRM (CAP_TIPOS_, CAP_METODOS_, CAP_ORIGENES_). Origen = quien inicio el contacto.
+  M.GEST_TIPOS = ['Prospección', 'Contacto', 'Reunión', 'Cotización', 'Seguimiento cotización', 'Toma de pedido', 'Cobranza', 'Postventa'];
+  M.GEST_METODOS = ['Teléfono', 'WhatsApp', 'Email', 'Videollamada', 'Presencial en cliente', 'Presencial en Refrichile'];
+  M.GEST_ORIGENES = ['Saliente', 'Entrante'];
+  M.gestPideCot = function (b) { return (b.gtipo === 'Cotización' || b.gtipo === 'Seguimiento cotización') && !String(b.cot || '').trim(); };
   M.vista = function (r, datos) {
     var v = datos.ventas || {}, P = M.pesos, o = { titulo: '', etiqueta: '', nombre: r.cli ? r.cli.n : '', filas: [], nota: '', dicho: '' };
     function pct(a, p) { if (!p) return '—'; var x = Math.round((a - p) / Math.abs(p) * 100); return (x > 0 ? '+' : '') + x + '%'; }
@@ -547,7 +550,11 @@
 
   // ------------------------------------------------------------------ registrar una gestion
   // "llamé a X", "visité a X": contar algo que ya se hizo con un cliente. Chrome escribe la tilde; sin tilde "llame a X" es llamar ahora.
+  // "me llamó X", "vino X": el contacto lo inició el cliente (origen Entrante)
+  var ENTRA = /^\s*(ayer|anteayer|hoy|reci[eé]n)?[,\s]*(me|nos) (llam[oó]|llamaron|escribi[oó]|escribieron|contact[oó]|contactaron|visit[oó]|visitaron|pidi[oó]|pidieron|consult[oó]|consultaron|mand[oó]|envi[oó])(?![a-záéíóúñ])/i;
+  M.esEntrante = function (t) { return ENTRA.test(String(t || '')) || /^\s*(ayer |hoy )?(vino|vinieron)(?![a-z])/i.test(String(t || '')); };
   M.esPasado = function (t) {
+    if (M.esEntrante(t)) return true;
     return /^\s*(ayer|anteayer|hoy|reci[eé]n|bueno|listo)?[,\s]*(le|la|lo|les|me)?\s*(llam[eé]|habl[eé]|convers[eé]|contact[eé]|visit[eé]|reun[ií]|escrib[ií]|mand[eé]|envi[eé]|cotic[eé]|pas[eé]|atend[ií]|estuve|fui)(?![a-záéíóúñ])/i.test(String(t || ''))
       && (/[éí]/.test(String(t).split(/\s+/).slice(0, 4).join(' ')) || /^\s*(ayer |hoy )?(estuve|fui) (con|en|donde|a)\b/i.test(String(t)));
   };
@@ -576,6 +583,7 @@
     s = s.replace(/^\s*(registra\w*|anota\w*|agrega\w*|guarda\w*|ingresa\w*|deja\w*|crea\w*)?\s*(una |la |otra |nueva )*gesti[oó]n\s*(con|de|para|a|al|del)?\s+(el cliente |la empresa |cliente )?/i, ' ');
     (f.usado || []).forEach(function (u) { s = s.replace(new RegExp(' ' + u.split(' ').map(sinAcentoRx).join(' ') + '(?=[ ,.;:])', 'i'), ' '); });
     if (cli) s = quitarCliente(s, cli);
+    s = s.replace(/^[\s,.;:]*(me |nos )(llam[oó]|llamaron|escribi[oó]|escribieron|contact[oó]|contactaron|visit[oó]|visitaron|pidi[oó]|pidieron|consult[oó]|consultaron|mand[oó]|envi[oó])(?![a-záéíóúñ])\s*/i, ' ').replace(/^[\s,.;:]*(vino|vinieron)(?![a-z])\s*(a la oficina|a refrichile|al local)?/i, ' ');
     s = s.replace(/^[\s,.;:]*(ya )?(le |la |lo |les |me )?(llam[eé]|habl[eé]|convers[eé]|contact[eé]|visit[eé]|me reun[ií]|reun[ií]|escrib[ií]|mand[eé]|envi[eé]|cotic[eé]|pas[eé]|atend[ií]|estuve|fui)(?![a-záéíóúñ])\s*(a |al |con |donde |por donde |en |de )?(?![a-záéíóúñ])/i, ' ');
     s = s.replace(/^[\s,.;:]*(por |v[ií]a |en )(tel[eé]fono|whatsapp|wsp|correo|mail|email)\b/i, ' ');
     s = s.replace(/^[\s,.;:]*(y|que|pero|donde)\s+/i, ' ').replace(/^[\s,.;:]+/, '').replace(/[\s,;:]+$/, '');
@@ -586,6 +594,7 @@
     var raw = String(texto || ''), n = ' ' + M.norm(raw) + ' ', f = M.leerFecha(raw), cot = M.cotizacionDe(raw), cli = (clis || [])[0] || null;
     var metodo = /\b(whatsapp|wasap|wsp|guasap|por mensaje)\b/.test(n) ? 'WhatsApp'
       : /\b(correo|mail|email)\b/.test(n) ? 'Email'
+      : /\b(videollamada|video llamada|meet|zoom|teams)\b/.test(n) ? 'Videollamada'
       : /\b(vino|vinieron|paso por (la oficina|refrichile|el local|el meson)|en (la oficina|refrichile|el meson)|retiro en)\b/.test(n) ? 'Presencial en Refrichile'
       : /\b(visit\w*|estuve|fui|reuni\w*|presencial|en terreno|pase (a|por|donde))\b/.test(n) ? 'Presencial en cliente'
       : /\b(llam\w*|telefon\w*)\b/.test(n) ? 'Teléfono' : '';
@@ -598,20 +607,22 @@
       : /\b(visit\w*|estuve|fui|reuni\w*|presencial|terreno)\b/.test(n) ? 'Reunión' : 'Contacto';
     // Una fecha futura no es de una gestion hecha (seria lo que quedo de hacerse): se deja hoy.
     var fecha = f.iso && M.diasHasta(f.iso) <= 0 ? f.iso : M.iso(M.hoy0());
-    return { tipo: 'gestion', gtipo: gtipo, metodo: metodo, comentario: M.comentarioGestion(raw, f.iso && M.diasHasta(f.iso) <= 0 ? f : { usado: [] }, cli), detalle: raw, fecha: fecha, hora: '', titulo: '', clis: clis || [], cli: cli ? cli.r : '', cot: cot };
+    return { tipo: 'gestion', gtipo: gtipo, metodo: metodo, comentario: M.comentarioGestion(raw, f.iso && M.diasHasta(f.iso) <= 0 ? f : { usado: [] }, cli), detalle: raw, fecha: fecha, hora: '', titulo: '', clis: clis || [], cli: cli ? cli.r : '', cot: cot, origen: M.esEntrante(raw) ? 'Entrante' : 'Saliente' };
   };
   // Correcciones dichas sobre una gestion por confirmar: "fue por WhatsApp", "es una visita", "fue ayer", "agrega que...", "sin comentario"
   M.corregirGestion = function (b, texto, cartera) {
     var n = ' ' + M.norm(texto) + ' ', cambios = [], f = M.leerFecha(texto), m;
     if (f.iso && M.diasHasta(f.iso) <= 0 && f.iso !== b.fecha) { b.fecha = f.iso; cambios.push('fecha'); }
-    if ((m = n.match(/ (?:fue|era|es|por|via|como|mejor|ponlo como|ponla como|cambia\w*(?: a)?) (?:una? |por |como |el |la )?(llamad[oa]|telefono|whatsapp|wasap|wsp|correo|mail|email|visita|reunion|presencial|en terreno|cotizacion|seguimiento|pedido|toma de pedido|postventa|cobranza|prospeccion|contacto) /))) {
+    if ((m = n.match(/ (?:fue|era|es|por|via|como|mejor|ponlo como|ponla como|cambia\w*(?: a)?) (?:una? |por |como |el |la )?(llamad[oa]|telefono|whatsapp|wasap|wsp|correo|mail|email|videollamada|visita|reunion|presencial|en terreno|cotizacion|seguimiento|pedido|toma de pedido|postventa|cobranza|prospeccion|contacto) /))) {
       var k = m[1], antes = b.gtipo + '|' + b.metodo;
-      if (/llamad|telefono/.test(k)) b.metodo = 'Teléfono'; else if (/whats|wasap|wsp/.test(k)) b.metodo = 'WhatsApp'; else if (/correo|mail/.test(k)) b.metodo = 'Email';
+      if (/llamad|telefono/.test(k)) b.metodo = 'Teléfono'; else if (/whats|wasap|wsp/.test(k)) b.metodo = 'WhatsApp'; else if (/correo|mail/.test(k)) b.metodo = 'Email'; else if (k === 'videollamada') b.metodo = 'Videollamada';
       else if (/visita|presencial|terreno/.test(k)) { b.gtipo = 'Reunión'; b.metodo = 'Presencial en cliente'; } else if (k === 'reunion') b.gtipo = 'Reunión';
       else if (k === 'cotizacion') b.gtipo = 'Cotización'; else if (k === 'seguimiento') b.gtipo = 'Seguimiento cotización'; else if (/pedido/.test(k)) b.gtipo = 'Toma de pedido';
       else if (k === 'postventa') b.gtipo = 'Postventa'; else if (k === 'cobranza') b.gtipo = 'Cobranza'; else if (k === 'prospeccion') b.gtipo = 'Prospección'; else if (k === 'contacto') b.gtipo = 'Contacto';
       if (antes !== b.gtipo + '|' + b.metodo) cambios.push('tipo');
     }
+    if (/ (entrante|me llamo|me llamaron|me escribio|me escribieron|me contacto|llamo el|escribio el|fue el cliente|el cliente (me )?(llamo|escribio|contacto)) /.test(n)) { if (b.origen !== 'Entrante') { b.origen = 'Entrante'; cambios.push('origen'); } }
+    else if (/ (saliente|lo llame yo|la llame yo|llame yo|le escribi yo|fui yo|yo (lo |la |los )?(llame|contacte)) /.test(n)) { if (b.origen !== 'Saliente') { b.origen = 'Saliente'; cambios.push('origen'); } }
     if (/ (sin comentario|sin detalle|sin nada|borra el comentario) /.test(n)) { if (b.comentario) { b.comentario = ''; cambios.push('comentario'); } }
     else if ((m = texto.match(/\b(?:que diga|el comentario es|mejor que diga|comentario:?)\s+(.+)$/i))) { b.comentario = M.capital(m[1]); cambios.push('comentario'); }
     else if ((m = texto.match(/\b(?:agr[eé]ga(?:le)?|a[nñ][aá]de(?:le)?|an[oó]ta(?:le)?|p[oó]n(?:le)?|suma(?:le)?)\s+(?:tambi[eé]n\s+)?(?:que\s+)?(.+)$/i))) { b.comentario = (b.comentario ? b.comentario.replace(/[.\s]+$/, '') + '. ' : '') + M.capital(m[1]); cambios.push('comentario'); }
@@ -622,12 +633,12 @@
   // Lo que se confirma de viva voz antes de registrar. quien: nombre del vendedor cuando la registra la jefatura a su nombre.
   M.fraseGestion = function (b, cartera, quien) {
     var c = cartera && cartera.porRut[b.cli];
-    return 'Gestión con ' + (c ? c.n : 'el cliente') + ': ' + M.gestTxt(b.gtipo, b.metodo) + (b.cot ? ', cotización ' + b.cot : '') + (b.fecha !== M.iso(M.hoy0()) ? ', ' + M.haceTxt(b.fecha) : '')
+    return 'Gestión con ' + (c ? c.n : 'el cliente') + ': ' + M.gestTxt(b.gtipo, b.metodo) + (b.origen === 'Entrante' ? ', iniciado por el cliente' : '') + (b.cot ? ', cotización ' + b.cot : '') + (b.fecha !== M.iso(M.hoy0()) ? ', ' + M.haceTxt(b.fecha) : '')
       + (b.comentario ? '. Comentario: ' + b.comentario.replace(/[.\s]+$/, '') : ', sin comentario') + (quien ? '. Queda a nombre de ' + quien : '') + '. ¿La registro?';
   };
   M.datosGestion = function (b, cartera) {
     var c = cartera && cartera.porRut[b.cli];
-    return { rid: M.ridNuevo(), rut: b.cli, cliente: c ? c.n : '', tipo: b.gtipo, metodo: b.metodo, comentario: b.comentario || '', fecha: b.fecha, cot: b.cot || '', texto: b.detalle };
+    return { rid: M.ridNuevo(), rut: b.cli, cliente: c ? c.n : '', tipo: b.gtipo, metodo: b.metodo, origen: b.origen === 'Entrante' ? 'Entrante' : 'Saliente', comentario: b.comentario || '', fecha: b.fecha, cot: b.cot || '', texto: b.detalle };
   };
   // La gestion que corresponde a un pendiente recien cerrado ("Llamar a X por la cotización 41022" -> seguimiento por teléfono)
   M.gestionDeTarea = function (t, dicho, cli) {

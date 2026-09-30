@@ -432,7 +432,7 @@ function tarjetaGestion(b) {
   }
   var c = CM.porRut[b.cli];
   if (DM.todos && !DM.cod && !aNombreDe(b)) { BORR = null; var m1 = (c ? c.n : 'Ese cliente') + ' no tiene asignado un vendedor del equipo: no se puede registrar la gestión.'; estado(m1, 'err'); decir(m1); return; }
-  pintarGestion(); preguntar(M.fraseGestion(b, CM, aNombreDe(b)));
+  pintarGestion(); preguntar(M.gestPideCot(b) ? '¿Cuál es el número de la cotización?' : M.fraseGestion(b, CM, aNombreDe(b)));
 }
 function pintarGestion() {
   var b = BORR, c = CM.porRut[b.cli], quien = aNombreDe(b);
@@ -441,16 +441,18 @@ function pintarGestion() {
     + '<div style="font-weight:700;font-size:17px;margin-bottom:6px">' + esc(c ? c.n : '') + '</div>'
     + '<div class="dos"><div class="campo"><label for="gTipo">Tipo</label><select id="gTipo">' + opc(M.GEST_TIPOS, b.gtipo) + '</select></div><div class="campo"><label for="gMet">Medio</label><select id="gMet">' + opc(M.GEST_METODOS, b.metodo, '—') + '</select></div></div>'
     + '<div class="dos"><div class="campo"><label for="gFec">Fecha</label><input id="gFec" type="date" max="' + iso(hoy0()) + '" value="' + esc(b.fecha) + '"></div><div class="campo"><label for="gCot">N° cotización</label><input id="gCot" inputmode="numeric" value="' + esc(b.cot || '') + '"></div></div>'
+    + '<div class="campo"><label for="gOri">Quién inició el contacto</label><select id="gOri">' + opc(M.GEST_ORIGENES, b.origen || 'Saliente') + '</select></div>'
     + '<div class="campo"><label for="gCom">Comentario</label><textarea id="gCom">' + esc(b.comentario || '') + '</textarea></div>'
     + '<div class="acciones"><button type="button" class="btn s" id="bNo">Cancelar</button><button type="button" class="btn p" id="bSi">Registrar</button></div></div>');
   $('bSi').onclick = guardarGestion; $('bNo').onclick = cancelarBorrador;
 }
 function leerGestion() {
   if (!BORR || BORR.tipo !== 'gestion' || !$('gTipo') || !$('gTipo').value) return;
-  BORR.gtipo = $('gTipo').value; BORR.metodo = $('gMet').value; BORR.fecha = $('gFec').value || iso(hoy0()); BORR.cot = String($('gCot').value || '').trim(); BORR.comentario = String($('gCom').value || '').trim();
+  BORR.gtipo = $('gTipo').value; BORR.metodo = $('gMet').value; BORR.fecha = $('gFec').value || iso(hoy0()); BORR.cot = String($('gCot').value || '').trim(); BORR.comentario = String($('gCom').value || '').trim(); if ($('gOri') && $('gOri').value) BORR.origen = $('gOri').value;
 }
 function guardarGestion() {
   leerGestion(); var b = BORR; if (!b) return;
+  if (M.gestPideCot(b)) { var mf = 'Falta el número de la cotización.'; estado(mf, 'err'); decir(mf); return; }
   var d = M.datosGestion(b, CM); BORR = null;
   DM.gest.unshift({ f: d.fecha, rut: d.rut, n: d.cliente, tipo: d.tipo, met: d.metodo, cot: d.cot, contacto: '', com: d.comentario, vc: DM.cod || (DM.cliMap[d.rut] || {}).v || '', folio: 'prov-' + d.rid, rid: d.rid });
   pintar('<div class="card"><h3>Gestión registrada</h3><div class="n" style="font-weight:600">' + esc(d.cliente) + '</div><div class="nota">' + esc(capital(M.gestTxt(d.tipo, d.metodo))) + ' · ' + esc(capital(M.haceTxt(d.fecha))) + (d.comentario ? ' · ' + esc(d.comentario) : '') + '</div>'
@@ -698,6 +700,11 @@ function responder(texto) {
   if (!BORR) return false;
   if (BORR.tipo === 'gestion') {
     leerGestion();
+    if (M.gestPideCot(BORR)) {
+      var nc = (texto.replace(/[.\s]/g, '').match(/\d{3,8}/) || [])[0];
+      if (nc) { BORR.cot = nc; pintarGestion(); preguntar(M.fraseGestion(BORR, CM, aNombreDe(BORR))); return true; }
+      if (/ (no se|no lo se|no me acuerdo|no lo tengo|no tengo|sin numero) /.test(n)) { BORR.gtipo = 'Contacto'; pintarGestion(); preguntar(M.fraseGestion(BORR, CM, aNombreDe(BORR))); return true; }
+    }
     if (M.corregirGestion(BORR, texto, CM).length) { RESP_INTENTOS = 0; pintarGestion(); preguntar('Queda así. ' + M.fraseGestion(BORR, CM, aNombreDe(BORR))); return true; }
     var rg = siNo(n);
     if (rg > 0) { guardarGestion(); return true; }

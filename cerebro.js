@@ -106,6 +106,11 @@
         if (M.siNo(texto) < 0) return 'Bien, no la registro.';
         if (!p.intentos) { p.intentos = 1; this.pregunta = p; return 'No reconocí ese cliente en tu cartera. Dime el nombre de nuevo.'; }
         return 'No encontré ese cliente. Lo dejo sin registrar.';
+      } else if (p.tipo === 'gcot') {
+        var nc = (texto.replace(/[.\s]/g, '').match(/\d{3,8}/) || [])[0];
+        if (nc) { p.borrador.cot = nc; return this.seguirGestion(p.borrador); }
+        if (/ (no se|no lo se|no me acuerdo|no lo tengo|no tengo|sin numero|ninguna|despues) /.test(n) || M.siNo(texto) < 0) { p.borrador.gtipo = 'Contacto'; return this.seguirGestion(p.borrador); }
+        if (!p.intentos) { p.intentos = 1; this.pregunta = p; return 'Dime solo el número de la cotización, o di que no lo tienes.'; }
       } else if (p.tipo === 'gcoment') {
         var itc = M.intencion(texto);
         if (/ (sin comentario|nada|ninguno|no hace falta|asi no mas|dejalo asi) /.test(n) || (M.siNo(texto) < 0 && n.trim().split(' ').length <= 3)) { p.borrador.sinComentario = true; return this.confirmar(p.borrador); }
@@ -117,7 +122,7 @@
       } else if (p.tipo === 'confirmar' && p.borrador.tipo === 'gestion') {
         var bg = p.borrador, itg = M.intencion(texto), otra = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado|recordatorio)$/.test(itg);
         if (!otra) {
-          if (M.corregirGestion(bg, texto, this.cartera).length) return this.confirmar(bg, true);
+          if (M.corregirGestion(bg, texto, this.cartera).length) return M.gestPideCot(bg) ? this.seguirGestion(bg) : this.confirmar(bg, true);
           s = M.siNo(texto);
           if (s > 0) return this.guardarGestion(bg);
           if (s < 0) return p.ofrecida ? 'Bien.' : 'Bien, no la registro.';
@@ -362,13 +367,17 @@
     if (!b.cli) { this.pregunta = { tipo: 'gcli', borrador: b }; return '¿Con qué cliente fue la gestión?'; }
     var c = this.cartera.porRut[b.cli]; if (c) this.ult.cli = c;
     if (c && !this.puedeGestion(c)) return c.n + ' no tiene asignado un vendedor del equipo, así que no puedo registrar la gestión.';
+    // El CRM exige el numero para una cotizacion o su seguimiento (sin el no hay cruce con el ERP): se pregunta.
+    if (M.gestPideCot(b)) { this.pregunta = { tipo: 'gcot', borrador: b }; return '¿Cuál es el número de la cotización?'; }
     if (!b.comentario && !b.sinComentario) { this.pregunta = { tipo: 'gcoment', borrador: b }; return '¿Qué anoto de la gestión con ' + (c ? c.n : 'el cliente') + '? Es ' + M.gestTxt(b.gtipo, b.metodo) + '.'; }
     return this.confirmar(b);
   };
   C.prototype.guardarGestion = function (b) {
     var d = M.datosGestion(b, this.cartera), c = this.cartera.porRut[b.cli];
     this.datos.gest.unshift({ f: d.fecha, rut: d.rut, n: d.cliente, tipo: d.tipo, met: d.metodo, cot: d.cot, contacto: '', com: d.comentario, vc: this.datos.cod || (this.datos.cliMap[b.cli] || {}).v || '', folio: 'prov-' + d.rid, rid: d.rid });
-    this.cola.agregar('gestion', d, 'Gestión con ' + d.cliente);
+    // Fuera de la app del CRM la gestion va a la API de voz (modo prueba). Dentro de la app, quien la incorpore define
+    // alGestion(d) para dar el alta con la funcion del CRM (capturaAddGestion) por la puerta.
+    if (this.alGestion) this.alGestion(d, b); else this.cola.agregar('gestion', d, 'Gestión con ' + d.cliente);
     this.ultimaAccion = { tipo: 'gestion', rid: d.rid, t: Date.now(), txt: 'Gestión con ' + d.cliente }; if (c) this.ult.cli = c;
     return 'Listo, registré la gestión con ' + d.cliente + ': ' + M.gestTxt(d.tipo, d.metodo) + (d.fecha !== M.iso(M.hoy0()) ? ', ' + M.haceTxt(d.fecha) : '') + '.';
   };

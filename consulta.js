@@ -176,7 +176,8 @@
       var b = BORR, c = cartera.porRut[b.cli], quien = aNombreDe(b);
       if (!b.cli) { if (b.clis.length) return cardElegir(b.clis, 'gestion'); BORR = null; aviso('Dime con qué cliente fue. Por ejemplo: “llamé a Clima Norte y quedó en enviar la orden”.', true); decir('¿Con qué cliente fue?'); return; }
       if (datos.todos && !datos.cod && !quien) { BORR = null; aviso((c ? c.n : 'Ese cliente') + ' no tiene asignado un vendedor del equipo: no se puede registrar la gestión.', true); return; }
-      var pie = b.cot ? 'Cot. ' + b.cot : '';
+      var pie = b.cot ? 'Cot. ' + b.cot : '', falta = M.gestPideCot(b);
+      if (falta) { editar = true; decir('Falta el número de la cotización.'); }
       if (!editar) {
         pintar(card('¿Registro la gestión?', '<div class="vc-nom">' + esc(c ? c.n : '') + '</div><div class="vc-nota">' + esc(M.capital(M.gestTxt(b.gtipo, b.metodo))) + ' · ' + esc(M.capital(M.haceTxt(b.fecha))) + (quien ? ' · a nombre de ' + esc(quien) : '') + '</div>'
           + '<div class="vc-fila"><div class="s">' + (b.comentario ? esc(b.comentario) : 'Sin comentario') + '</div></div>'
@@ -186,13 +187,16 @@
       function opc(lista, val, vacio) { return (vacio ? '<option value="">' + vacio + '</option>' : '') + lista.map(function (x) { return '<option' + (x === val ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join(''); }
       pintar(card('Registrar gestión', '<div class="vc-nom">' + esc(c ? c.n : '') + '</div>'
         + '<div class="vc-dos"><div class="vc-campo"><label>Tipo</label><select name="gtipo">' + opc(M.GEST_TIPOS, b.gtipo) + '</select></div><div class="vc-campo"><label>Medio</label><select name="metodo">' + opc(M.GEST_METODOS, b.metodo, '—') + '</select></div></div>'
-        + '<div class="vc-dos"><div class="vc-campo"><label>Fecha</label><input name="fecha" type="date" max="' + M.iso(M.hoy0()) + '" value="' + esc(b.fecha) + '"></div><div class="vc-campo"><label>N° cotización</label><input name="cot" inputmode="numeric" value="' + esc(b.cot || '') + '"></div></div>'
+        + '<div class="vc-dos"><div class="vc-campo"><label>Fecha</label><input name="fecha" type="date" max="' + M.iso(M.hoy0()) + '" value="' + esc(b.fecha) + '"></div><div class="vc-campo"><label>N° cotización' + (falta ? ' (obligatorio)' : '') + '</label><input name="cot" inputmode="numeric" value="' + esc(b.cot || '') + '"></div></div>'
+        + '<div class="vc-campo"><label>Quién inició el contacto</label><select name="origen">' + opc(M.GEST_ORIGENES, b.origen || 'Saliente') + '</select></div>'
         + '<div class="vc-campo"><label>Comentario</label><textarea name="comentario">' + esc(b.comentario || '') + '</textarea></div>'
         + '<div class="vc-acc"><button type="button" class="vc-btn s" data-acc="cancelar">Cancelar</button><button type="button" class="vc-btn p" data-acc="guardar">Registrar</button></div>', quien ? 'A nombre de ' + quien : ''));
     }
     function guardarGestion() {
       var f = res.querySelector('.vc-card'), b = BORR; if (!b) return;
-      if (f && f.querySelector('[name=gtipo]')) { b.gtipo = f.querySelector('[name=gtipo]').value; b.metodo = f.querySelector('[name=metodo]').value; b.fecha = f.querySelector('[name=fecha]').value || M.iso(M.hoy0()); b.cot = f.querySelector('[name=cot]').value.trim(); b.comentario = f.querySelector('[name=comentario]').value.trim(); }
+      if (f && f.querySelector('[name=gtipo]')) { b.gtipo = f.querySelector('[name=gtipo]').value; b.metodo = f.querySelector('[name=metodo]').value; b.fecha = f.querySelector('[name=fecha]').value || M.iso(M.hoy0()); b.cot = f.querySelector('[name=cot]').value.trim(); b.comentario = f.querySelector('[name=comentario]').value.trim(); b.origen = f.querySelector('[name=origen]').value; }
+      if (M.gestPideCot(b)) return cardGestion(true);
+      if (opc.alGestion) { var dg = M.datosGestion(b, cartera); BORR = null; return opc.alGestion(dg, b); }   // dentro de la app del CRM: el alta la da el CRM
       var d = M.datosGestion(b, cartera); BORR = null;
       datos.gest.unshift({ f: d.fecha, rut: d.rut, n: d.cliente, tipo: d.tipo, met: d.metodo, cot: d.cot, contacto: '', com: d.comentario, vc: datos.cod || (datos.cliMap[d.rut] || {}).v || '', folio: 'prov-' + d.rid, rid: d.rid });
       pintar(card('Gestión registrada', '<div class="vc-nom">' + esc(d.cliente) + '</div><div class="vc-nota">' + esc(M.capital(M.gestTxt(d.tipo, d.metodo))) + ' · ' + esc(M.capital(M.haceTxt(d.fecha))) + (d.comentario ? ' · ' + esc(d.comentario) : '') + '</div>'
