@@ -104,7 +104,7 @@
     // ---------------------------------------------------------------- datos en el telefono
     var ERR_DATOS = '';
     function pie() { pieT.textContent = datos.t ? 'Datos de las ' + M.horaTxt(datos.t) + (navigator.onLine === false ? ' · sin señal' : '') : (navigator.onLine === false ? 'Sin señal y sin datos guardados' : ERR_DATOS ? 'Sin datos: ' + ERR_DATOS : 'Cargando datos…'); }
-    function fase(f) { if (opc.alFase) { try { opc.alFase(f); } catch (e) {} } }
+    function fase(f, texto) { if (opc.alFase) { try { opc.alFase(f, texto || ''); } catch (e) {} } }
     function usarDatos(o, t) {
       datos.usar(o, t); cartera.cargar(datos.clientes());
       var hechas = cola.hechasPendientes(), prov = PEND.filter(function (x) { return /^prov-/.test(x.id); });
@@ -450,15 +450,20 @@
       } catch (e) { fase(''); }
     }
     function escuchar() {
-      if (escuchando) { try { rec.stop(); } catch (e) {} return; }
-      rec = new SR(); rec.lang = 'es-CL'; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
+      if (rec) { try { rec.stop(); } catch (e) {} return; }      // ya esta oyendo (o por oir): el toque lo para, no abre otro dictado
+      var r = rec = new SR(); r.lang = 'es-CL'; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
       var fin = '';
       rec.onstart = function () { escuchando = true; bMic.classList.add('on'); input.placeholder = 'Te escucho…'; fase('escuchando'); };
       rec.onresult = function (ev) { var t = ''; for (var i = ev.resultIndex; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) fin += ev.results[i][0].transcript; } input.value = fin || t; };
-      rec.onerror = function (ev) { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') aviso('Permite el micrófono para usar la voz.', true); };
-      rec.onend = function () { escuchando = false; bMic.classList.remove('on'); input.placeholder = opc.placeholder || 'Precio, stock, cliente, pendientes…'; var t = (fin || input.value).trim(); if (t) { fase('pensando'); input.value = ''; procesar(t); if (!raiz.speechSynthesis || !speechSynthesis.speaking) setTimeout(function () { if (!speechSynthesis.speaking) fase(''); }, 400); } else fase(''); };
-      try { rec.start(); } catch (e) {}
+      rec.onerror = function (ev) {
+        var m = ev.error === 'not-allowed' || ev.error === 'service-not-allowed' ? 'Permite el micrófono para usar la voz.' : ev.error === 'audio-capture' ? 'No encuentro el micrófono.' : ev.error === 'network' ? 'El dictado necesita señal.' : '';
+        if (m) { aviso(m, true); fase('aviso', m); }
+      };
+      rec.onend = function () { if (rec === r) rec = null; escuchando = false; bMic.classList.remove('on'); input.placeholder = opc.placeholder || 'Precio, stock, cliente, pendientes…'; var t = (fin || input.value).trim(); if (t) { fase('pensando'); input.value = ''; procesar(t); if (!raiz.speechSynthesis || !speechSynthesis.speaking) setTimeout(function () { if (!speechSynthesis.speaking) fase(''); }, 400); } else fase(''); };
+      fase('escuchando');                                       // la esfera aparece al tocar, no cuando el navegador confirma (30-09)
+      try { r.start(); } catch (e) { if (rec === r) rec = null; fase(''); }
     }
+    function parar() { if (rec) { try { rec.abort(); } catch (e) {} } }
     if (micPermitido) { bMic.hidden = false; bMic.onclick = function () { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); }; }
     else if (opc.pwa) { bMic.hidden = false; bMic.title = 'Hablar (abre Voz Refrichile)'; bMic.setAttribute('aria-label', 'Hablar (abre Voz Refrichile)'); bMic.onclick = function () { raiz.open(opc.pwa + '?mic=1', '_blank', 'noopener'); }; }
 
@@ -504,7 +509,7 @@
 
     return {
       consultar: procesar, refrescar: function () { pedirDatos(true); }, enfocar: function () { input.focus(); },
-      datos: datos, cartera: cartera, escuchar: function () { if (micPermitido) { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); } },
+      datos: datos, cartera: cartera, puedeOir: micPermitido, escuchar: function () { if (micPermitido) { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); } }, parar: parar,
       destruir: function () { clearInterval(reloj); el.innerHTML = ''; el.classList.remove('vc'); }
     };
   }
