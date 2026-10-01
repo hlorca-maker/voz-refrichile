@@ -356,7 +356,7 @@ function rapido(texto) {
   var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
   if (tipo === 'pend') { $('vivo').textContent = texto; verPendientes(true); return true; }
   // Gestiones, cotizaciones por estado, ano anterior y documentos (28-09-2026): lo resuelve el motor.
-  if (/^(gestion|visita|gestiones|cotvend|comparar|docs|nv)$/.test(tipo)) {
+  if (/^(gestion|visita|gestiones|cotvend|comparar|docs|nv|analisis)$/.test(tipo)) {
     var rm = M.interpretar(texto, { datos: DM, cartera: CM });
     if (rm.tipo === 'ia') return false;
     $('vivo').textContent = texto;
@@ -710,7 +710,7 @@ function responder(texto) {
     var rg = siNo(n);
     if (rg > 0) { guardarGestion(); return true; }
     if (rg < 0) { cancelarBorrador(); decir('Bien, no la registro.'); return true; }
-    if (/^(precio|stock|contacto|cotiz|pend|llamar|hecha|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado)$/.test(intencion(texto))) { BORR = null; RESP_INTENTOS = 0; return false; }
+    if (/^(precio|stock|contacto|cotiz|pend|llamar|hecha|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|analisis|cotizado)$/.test(intencion(texto))) { BORR = null; RESP_INTENTOS = 0; return false; }
     if (++RESP_INTENTOS <= 1) { preguntar('No te entendí. Di sí para registrarla, no para descartarla, o dime qué cambio.'); return true; }
     estado('Revisa la tarjeta y toca Registrar o Cancelar'); return true;
   }

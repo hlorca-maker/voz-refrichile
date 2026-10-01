@@ -355,7 +355,7 @@
       if (r.tipo === 'pend') return cardPend(true);
       if (r.tipo === 'gestiones') return r.resultado ? cardVista(r) : aviso('Todavía no tengo las gestiones en este equipo.', true);
       if (r.tipo === 'nv') return cardVista(r);
-      if (r.tipo === 'cotvend' || r.tipo === 'comparar' || r.tipo === 'docs') return conVentas(function () { cardVista(r); }, true);
+      if (r.tipo === 'cotvend' || r.tipo === 'comparar' || r.tipo === 'docs' || r.tipo === 'analisis') return conVentas(function () { cardVista(r); }, true);
       if (r.tipo === 'ventas' || r.tipo === 'meta') return cardVentas(r.tipo, r.periodo);
       if (r.tipo === 'riesgo' || r.tipo === 'mejores' || r.tipo === 'compras') return conVentas(function () {
         if (r.tipo === 'compras') { var cc = datos.comprasDe(r.cli.r) || { anio: 0, mes: 0, prods: [] }; pintar(card('Compras', '<div class="vc-nom">' + esc(r.cli.n) + '</div><div class="vc-fila"><div class="s">Este mes</div><div class="v">' + pesos(cc.mes) + '</div></div><div class="vc-fila"><div class="s">En el año</div><div class="v">' + pesos(cc.anio) + '</div></div><div class="vc-fila"><div class="s">Última compra</div><div class="v">' + (cc.ult ? esc(cc.ult) + '<small>hace ' + cc.dias + ' días</small>' : '—') + '</div></div>' + (cc.prods && cc.prods.length ? '<div class="vc-nota">Últimos productos: ' + esc(cc.prods.join(' · ')) + '</div>' : ''))); decir(M.comprasTxt(r.cli.n, datos.comprasDe(r.cli.r))); return; }

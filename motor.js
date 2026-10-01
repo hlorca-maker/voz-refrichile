@@ -18,7 +18,7 @@
  */
 (function (raiz) {
   'use strict';
-  var M = { version: '2026-09-30' };
+  var M = { version: '2026-10-01' };
 
   // ------------------------------------------------------------------ utilidades
   M.norm = function (s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\/:.,]+/g, ' ').replace(/\s+/g, ' ').trim(); };
@@ -106,6 +106,8 @@
     docs: /\b(((ultimas?|que|cuantas|las|mis|dame las|dime las) )?(facturas?|notas? de credito|boletas?) (de|del|a|al|para|tiene|hay|hice|emiti|emitimos|se emitieron|hoy|de hoy|de ayer|esta semana|de esta semana|de la semana|le (hice|hicimos|emiti))|notas? de credito|(ultima|que|cuantas) (facturas?|boletas?)|documentos? (de venta|del cliente|de|del|emitidos) |factura (numero |n |nro |no |num )?\d{3,}|que (facture|facturamos|emitimos|hemos facturado|he facturado|se facturo) (hoy|ayer|esta semana)|que le (facture|facturamos|hemos facturado|he facturado))\b/,
     // 30-09-2026 (Humberto): operacion: notas de venta pendientes, productos por despachar
     nv: /\b(notas? de venta|pendientes? de (despacho|entrega|facturar|facturacion)|por (despachar|entregar|facturar)|que (tengo|hay|falta|queda) (por|para) (despachar|entregar|facturar)|despachos? pendientes?|entregas? pendientes?|sin (despachar|entregar|facturar)|(mis|las) (nv|enevés|notas))\b/,
+    // 01-10-2026 (Humberto: "chat bot con toda la informacion y razones"): analisis calculado en el telefono (analisis.js)
+    analisis: /\b(a que ritmo|ritmo (de venta|actual|diario|necesario|requerido)|proyeccion|(vamos|voy|va) a llegar|(llegamos|alcanzamos|llego|llega|cumplimos|cumple) (a )?la meta|cuanto (hay que|tengo que|tenemos que|debo|debemos) vender por dia|por dia habil|dias habiles|clientes? (que )?(cayeron|bajaron|caen|bajan|vienen cayendo|compran menos|estan comprando menos|vienen bajando)|(mayores|principales) caidas|caida de (clientes|ventas por cliente)|quien(es)? (bajo|bajaron|cayo|cayeron|compra menos|esta comprando menos)|pareto|80 por ciento|80\/20|concentracion de (ventas|la cartera|clientes)|cuantos clientes (hacen|concentran|explican)|clientes? (sin (gestion|gestiones|contacto|contactar)|no gestionados|sin atender|desatendidos)|sin gestionar|(no (hemos|he|han|hay)|nadie ha) (gestionado|contactado|llamado|visitado)|clientes? nuevos?|nuevos clientes|reactivar|compraron el ano pasado|compraban el ano pasado|pipeline|embudo|cotizaciones? abiertas? (por|segun) (antiguedad|tramo|vendedor|edad|dias)|cuanto (hay|tenemos|tengo|llevamos) cotizado|monto cotizado|cotizaciones? (que )?(estan |hay |tengo |tenemos )?(sin seguimiento|vencidas?|con precio vencido|antiguas|viejas)|que (cotizaciones?|cotizacion) (empujar|empujo|priorizar|priorizo|cerrar|cierro|seguir|mover|apurar|atacar)|cotizaciones? (a|para|por|que) (empujar|priorizar|cerrar|seguir|apurar|atacar)|que (debo|deberia|tengo que|hay que|puedo|conviene) (empujar|priorizar|cerrar|apurar|atacar)|que empujo|que cierro|donde esta la plata|oportunidades (abiertas|de cierre)?|tasa de (cierre|conversion|exito)|cuanto cerramos|porcentaje de cierre|efectividad (de|en) (cotizaciones|cierre|ventas)|stock critico|quiebres?( de stock)?|que (nos |me )?falta (en|de) stock|sin stock (y )?cotizado|cotizado sin stock|productos? (sin|con poco|bajo|cortos? de) stock|productos? (mas|que mas) (vendid\w*|se venden|compran|salen|rotan|se repiten)|que (se )?(vende|venden|compran) mas|top (de )?productos|mas vendidos?|actividad (comercial|del equipo|de \w+)|cuantas gestiones (hizo|hicieron|hice|hemos hecho|llevamos|lleva|llevo|van|tiene)|gestiones por (vendedor|dia|tipo|medio)|cobertura (de|de la) cartera|como esta trabajando|que esta haciendo (el equipo|cada uno|\w+)|ranking|como va cada (vendedor|uno)|quien va (atrasado|atras|mejor|peor|mas atrasado|adelante)|vendedor(es)? (atrasad\w*|bajo (la )?meta|sobre (la )?meta)|compara\w* (a los |los )?vendedores|(ventas|avance|meta) por vendedor|como van los vendedores|como va el equipo)\b/,
     stock: /\b(stock|hay (stock|disponible|disponibilidad)|cuant[oa]s? (?!se |le |les |nos )(\w+ ){0,3}(hay|quedan|tenemos)\b(?! vendid| factur| cobrad)|disponibilidad)\b/,
     precio: /\b(precio|precios|cuanto (le |les )?(cuesta|sale|vale|esta|cobra\w*)|a como (esta|sale)|valor (de|del)|a cuanto)\b/,
     visita: /\b(visite|visitamos|estuve (con|en|donde)|fui (a|donde)|pase (a|por|donde)|me reuni|reunion con)\b/,
@@ -129,13 +131,14 @@
   M.intencion = function (t) {
     var R = M.R, n = ' ' + M.norm(t) + ' ';
     // Saludos y despedidas cortos, y "que puedes hacer": se contestan, no se adivinan.
-    if (n.split(' ').length <= 7 && /^ (hola|buenos dias|buenas tardes|buenas noches|buenas|que tal|como estas|como esta|gracias|muchas gracias|ok gracias|listo gracias|chao|adios|hasta luego|nos vemos|hola buenos dias|hola buenas|hola que tal)( \w+){0,2} $/.test(n)) return 'saludo';
+    if (!R.analisis.test(n) && n.split(' ').length <= 7 && /^ (hola|buenos dias|buenas tardes|buenas noches|buenas|que tal|como estas|como esta|gracias|muchas gracias|ok gracias|listo gracias|chao|adios|hasta luego|nos vemos|hola buenos dias|hola buenas|hola que tal)( \w+){0,2} $/.test(n)) return 'saludo';
     if (/\b(que (puedes|sabes|podrias|puedo) (hacer|preguntar\w*|pedir\w*|consultar)|en que (me )?(puedes |podrias )?ayud\w*|necesito ayuda|como funciona\w*|que haces|para que sirves|que cosas (puedes|haces|sabes)|instrucciones|que (me )?ofreces)\b/.test(n)
       || /^ (ayuda|ayudame) $/.test(n)
       || /^ (me )?(puedes|sabes|podrias) (buscar|consultar|ver|revisar|darme|entregar|decir) (los |las )?(datos|informacion|info|precios|stock|cotizaciones|pendientes|clientes|productos)( de (los |las )?(clientes?|productos?))? $/.test(n)) return 'ayuda';
     if (R.record.test(n)) return 'recordatorio';
     if (R.hecha.test(n)) return 'hecha';
     if (R.pend.test(n)) return 'pend';
+    if (R.analisis.test(n)) return 'analisis';
     if (R.meta.test(n)) return 'meta';
     if (R.nv.test(n)) return 'nv';
     if (R.gestion.test(n) || M.esPasado(t)) return 'gestion';
@@ -564,6 +567,7 @@
   M.GEST_ORIGENES = ['Saliente', 'Entrante'];
   M.gestPideCot = function (b) { return (b.gtipo === 'Cotización' || b.gtipo === 'Seguimiento cotización') && !String(b.cot || '').trim(); };
   M.vista = function (r, datos) {
+    if (r.tipo === 'analisis') return M.analisis ? M.analisis.vista(r, datos) : { titulo: 'Análisis', etiqueta: '', nombre: '', filas: [], nota: '', dicho: 'Falta el módulo de análisis en esta versión de la app.' };
     var v = datos.ventas || {}, P = M.pesos, o = { titulo: '', etiqueta: '', nombre: r.cli ? r.cli.n : '', filas: [], nota: '', dicho: '' };
     function pct(a, p) { if (!p) return '—'; var x = Math.round((a - p) / Math.abs(p) * 100); return (x > 0 ? '+' : '') + x + '%'; }
     if (r.tipo === 'gestiones') {
@@ -728,6 +732,27 @@
        { tipo:'pend' } | { tipo:'precio'|'stock', q, cli, resultado, consulta }  (resultado null = no esta en la copia)
        { tipo:'ficha', para:'contacto'|'cotiz'|'llamar', cli, resultado } | { tipo:'elegir', clis, para }
        { tipo:'hecha', cli } | { tipo:'borrador', borrador } | { tipo:'ia', motivo }  */
+  // Que analisis se pide (analisis.js): el sub y sus parametros (vendedor, periodo, dias, cuantos).
+  M.analisisDe = function (n, datos) {
+    var sub = /\b(pareto|80 por ciento|80\/20|concentracion|cuantos clientes (hacen|concentran|explican))\b/.test(n) ? 'pareto'
+      : /\b(ca(yeron|en|ida|idas|yo)|bajaron|bajan|bajo|vienen (cayendo|bajando)|compra(n)? menos|comprando menos)\b/.test(n) ? 'caida'
+      : /\b(reactivar|compra(ron|ban) el ano pasado)\b/.test(n) ? 'reactivar'
+      : /\b(nuevos?|nuevas)\b/.test(n) && /\bclientes?\b/.test(n) ? 'nuevos'
+      : /\b(sin (gestion|gestiones|contacto|contactar|atender|gestionar)|no gestionados|desatendidos|(no (hemos|he|han|hay)|nadie ha) (gestionado|contactado|llamado|visitado))\b/.test(n) ? 'singestion'
+      : /\b(empuj\w*|prioriz\w*|cerrar|cierro|apurar|atacar|mover|donde esta la plata|oportunidades)\b/.test(n) && !/\btasa\b/.test(n) ? 'empujar'
+      : /\b(tasa|cuanto cerramos|cuantas cotizaciones|porcentaje de cierre|efectividad)\b/.test(n) ? 'tasa'
+      : /\b(stock|quiebres?)\b/.test(n) ? 'stock'
+      : /\b(pipeline|embudo|cotizado|cotizaciones?)\b/.test(n) ? 'pipeline'
+      : /\b(productos?|vendidos?|se vende|venden mas|rotan)\b/.test(n) ? 'productos'
+      : /\b(ranking|cada (vendedor|uno)|quien va|vendedor(es)?|equipo)\b/.test(n) && !/\b(actividad|gestiones)\b/.test(n) ? 'ranking'
+      : /\b(actividad|gestiones|cobertura|trabajando|haciendo)\b/.test(n) ? 'actividad'
+      : 'ritmo';
+    var r = { sub: sub, periodo: / (mes|mensual|este mes|del mes) /.test(n) ? 'mes' : / (ano|anual|este ano|del ano) /.test(n) ? 'anio' : (sub === 'actividad' ? 'semana' : ''), vendedor: '' };
+    var md = n.match(/ (\d{2,3}) dias /); if (md) r.dias = +md[1];
+    var mn = n.match(/ (top |los |las |primer[oa]s )?(\d{1,2}) (clientes|cotizaciones|productos|mayores|mejores|primer[oa]s) /); if (mn) r.n = +mn[2];
+    if (datos && datos.todos) Object.keys(datos.vend || {}).forEach(function (c) { var nom = M.norm(datos.vend[c]).split(' ')[0]; if (nom && new RegExp(' ' + nom + '(?![a-z])').test(n)) r.vendedor = c; });
+    return r;
+  };
   M.interpretar = function (texto, ctx) {
     var tipo0 = M.intencion(texto);                                  // saludo y "que puedes hacer" se miran antes de limpiar
     if (tipo0 === 'saludo' || tipo0 === 'ayuda') return { tipo: tipo0 };
@@ -737,6 +762,8 @@
     var clis = cartera.buscar(texto), cli = clis[0] || null;
     var claro = !!cli && ((cli._cob || 0) >= .6 || clis.length === 1), nombrado = / (para|del cliente|de la empresa|a nombre de|donde) /.test(n);
     if (tipo === 'pend') return { tipo: 'pend' };
+    if (tipo === 'analisis') { var ra = M.analisisDe(n, datos); ra.tipo = 'analisis'; ra.resultado = datos.ventas ? true : null; return ra; }
+    if (tipo === 'riesgo' && M.analisis) { var rr = M.analisisDe(n, datos); rr.sub = 'riesgo'; rr.tipo = 'analisis'; rr.resultado = datos.ventas ? true : null; return rr; }   // con razones (01-10)
     if (tipo === 'ventas' || tipo === 'meta') return { tipo: tipo, resultado: datos.ventas || null, periodo: / hoy /.test(n) ? 'hoy' : / (esta |la )?semana /.test(n) ? 'semana' : '' };
     if (tipo === 'nv') {
       var subNv = / (despach\w*|entreg\w*) /.test(n) ? 'despacho' : / factur\w* /.test(n) ? 'facturar' : '';

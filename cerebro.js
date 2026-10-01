@@ -114,13 +114,13 @@
       } else if (p.tipo === 'gcoment') {
         var itc = M.intencion(texto);
         if (/ (sin comentario|nada|ninguno|no hace falta|asi no mas|dejalo asi) /.test(n) || (M.siNo(texto) < 0 && n.trim().split(' ').length <= 3)) { p.borrador.sinComentario = true; return this.confirmar(p.borrador); }
-        if (!/^(pend|precio|stock|contacto|cotiz|llamar|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores)$/.test(itc)) {
+        if (!/^(pend|precio|stock|contacto|cotiz|llamar|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|analisis)$/.test(itc)) {
           p.borrador.comentario = M.capital(texto.replace(/^\s*(que|anota que|pon que|comentario:?)\s+/i, '')).slice(0, 300); var fc = M.leerFecha(texto), cc0 = M.cotizacionDe(texto);
           if (cc0 && !p.borrador.cot) { p.borrador.cot = cc0; if (p.borrador.gtipo === 'Contacto') p.borrador.gtipo = 'Seguimiento cotización'; }
           return this.confirmar(p.borrador);
         }
       } else if (p.tipo === 'confirmar' && p.borrador.tipo === 'gestion') {
-        var bg = p.borrador, itg = M.intencion(texto), otra = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|cotizado|recordatorio|nv)$/.test(itg) || M.esOtraGestion(bg, texto, this.cartera);
+        var bg = p.borrador, itg = M.intencion(texto), otra = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|cotvend|comparar|docs|compras|riesgo|mejores|analisis|cotizado|recordatorio|nv)$/.test(itg) || M.esOtraGestion(bg, texto, this.cartera);
         if (!otra) {
           if (M.corregirGestion(bg, texto, this.cartera).length) return M.gestPideCot(bg) ? this.seguirGestion(bg) : this.confirmar(bg, true);
           s = M.siNo(texto);
@@ -136,7 +136,7 @@
         // el no, una correccion ("mejor el jueves", "a las 4", "sin cliente", "que diga..."), o lo
         // repite completo (se reemplaza el borrador), o pide otra cosa (se atiende).
         var b0 = p.borrador, cambios = [], f0 = M.leerFecha(texto), it = M.intencion(texto), palabras = n.trim().split(' ').length;
-        var nueva = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|gestion|cotvend|comparar|docs|compras|riesgo|mejores|cotizado)$/.test(it) || (/^(recordatorio|tarea|nota|visita|prosp)$/.test(it) && palabras >= 3 && M.tituloDe(texto, f0).length > 3);
+        var nueva = /^(pend|precio|stock|contacto|cotiz|llamar|hecha|saludo|ayuda|ventas|meta|gestiones|gestion|cotvend|comparar|docs|compras|riesgo|mejores|analisis|cotizado)$/.test(it) || (/^(recordatorio|tarea|nota|visita|prosp)$/.test(it) && palabras >= 3 && M.tituloDe(texto, f0).length > 3);
         if (!nueva) {
           if (f0.iso && f0.iso !== b0.fecha) { b0.fecha = f0.iso; cambios.push('fecha'); }
           if (f0.hora && f0.hora !== b0.hora) { b0.hora = f0.hora; cambios.push('hora'); }
@@ -193,6 +193,7 @@
     if (r.tipo === 'saludo' || r.tipo === 'ayuda') return this._atenderTipo(r.tipo, n);
     if (r.tipo === 'pend') return this.decirPendientes();
     if (r.tipo === 'ventas' || r.tipo === 'meta') return this.decirVentas(r.tipo, r.periodo);
+    if (r.tipo === 'analisis') { var selfA = this; return this.conVentas(function () { return M.vista(r, selfA.datos).dicho; }, true); }
     if (r.tipo === 'riesgo' || r.tipo === 'mejores') { var self0 = this; return this.conVentas(function () { return M.carteraTxt(r.sub, self0.datos.cartera(r.sub)); }); }
     if (r.tipo === 'compras') { var self1 = this; this.ult.cli = r.cli; return this.conVentas(function () { return M.comprasTxt(r.cli.n, self1.datos.comprasDe(r.cli.r)); }); }
     if (r.tipo === 'gestiones') {
