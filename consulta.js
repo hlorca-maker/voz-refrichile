@@ -441,29 +441,52 @@
     var SR = raiz.SpeechRecognition || raiz.webkitSpeechRecognition;
     var micPermitido = !!SR && !(doc.permissionsPolicy && doc.permissionsPolicy.allowsFeature && !doc.permissionsPolicy.allowsFeature('microphone'));
     var hablar = opc.hablar != null ? opc.hablar : micPermitido;
+    /* Chrome Android (prueba de Humberto, 30-09): el reconocimiento no siempre corta solo al callarse, onend puede no llegar
+       tras stop(), onstart puede no llegar nunca, y speechSynthesis.speaking queda en false un rato despues de speak(). Por
+       eso: corte por silencio propio, onend forzado, vigilante de arranque, y la fase "hablando" se lleva con una bandera. */
+    var TIEMPOS = { silencio: 1800, arranque: 6000, forzar: 1000 }, nDecir = 0, hablandoAhora = false;
     function decir(t) {
       if (!hablar || !raiz.speechSynthesis || !t) return;
       try {
         speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance(t.replace(/\$/g, '').replace(/(\d)\.(\d{3})/g, '$1$2')); u.lang = 'es-CL'; u.rate = 1.05;
-        fase('hablando'); var fin = function () { fase(''); }; u.onend = fin; u.onerror = fin; setTimeout(fin, Math.min(60000, 2500 + t.length * 90));
+        try { var vz = speechSynthesis.getVoices ? speechSynthesis.getVoices() : [], v = vz.filter(function (x) { return /^es[-_]?CL/i.test(x.lang); })[0] || vz.filter(function (x) { return /^es/i.test(x.lang); })[0]; if (v) u.voice = v; } catch (e2) {}
+        var mio = ++nDecir; hablandoAhora = true; fase('hablando');
+        var fin = function () { if (mio !== nDecir) return; hablandoAhora = false; fase(''); }; u.onend = fin; u.onerror = fin; setTimeout(fin, Math.min(60000, 2500 + t.length * 90));
         speechSynthesis.speak(u);
-      } catch (e) { fase(''); }
+      } catch (e) { hablandoAhora = false; fase(''); }
     }
     function escuchar() {
-      if (rec) { try { rec.stop(); } catch (e) {} return; }      // ya esta oyendo (o por oir): el toque lo para, no abre otro dictado
+      if (rec) { rec.manual = true; try { rec.stop(); } catch (e) {} return; }      // ya esta oyendo (o por oir): el toque lo para, no abre otro dictado
       var r = rec = new SR(); r.lang = 'es-CL'; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
-      var fin = '';
-      rec.onstart = function () { escuchando = true; bMic.classList.add('on'); input.placeholder = 'Te escucho…'; fase('escuchando'); };
-      rec.onresult = function (ev) { var t = ''; for (var i = ev.resultIndex; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) fin += ev.results[i][0].transcript; } input.value = fin || t; };
-      rec.onerror = function (ev) {
-        var m = ev.error === 'not-allowed' || ev.error === 'service-not-allowed' ? 'Permite el micrófono para usar la voz.' : ev.error === 'audio-capture' ? 'No encuentro el micrófono.' : ev.error === 'network' ? 'El dictado necesita señal.' : '';
-        if (m) { aviso(m, true); fase('aviso', m); }
+      var fin = '', parcial = '', silencio = 0, vigia = 0, terminado = false, avisado = false;
+      function cortar() {                                       // se callo: parar, y si el navegador no avisa el fin, darlo por terminado
+        try { r.stop(); } catch (e) {}
+        setTimeout(function () { if (!terminado) r.onend(); }, TIEMPOS.forzar);
+      }
+      function porSilencio() { clearTimeout(silencio); silencio = setTimeout(cortar, TIEMPOS.silencio); }
+      r.onstart = function () { clearTimeout(vigia); escuchando = true; bMic.classList.add('on'); input.placeholder = 'Te escucho…'; fase('escuchando', parcial); porSilencio(); };
+      r.onresult = function (ev) {
+        var t = ''; for (var i = ev.resultIndex; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) fin += ev.results[i][0].transcript; }
+        parcial = (fin || t).trim(); input.value = parcial; fase('escuchando', parcial); porSilencio();   // lo que va entendiendo, en vivo
       };
-      rec.onend = function () { if (rec === r) rec = null; escuchando = false; bMic.classList.remove('on'); input.placeholder = opc.placeholder || 'Precio, stock, cliente, pendientes…'; var t = (fin || input.value).trim(); if (t) { fase('pensando'); input.value = ''; procesar(t); if (!raiz.speechSynthesis || !speechSynthesis.speaking) setTimeout(function () { if (!speechSynthesis.speaking) fase(''); }, 400); } else fase(''); };
+      r.onerror = function (ev) {
+        var m = ev.error === 'not-allowed' || ev.error === 'service-not-allowed' ? 'Permite el micrófono para usar la voz.' : ev.error === 'audio-capture' ? 'No encuentro el micrófono.' : ev.error === 'network' ? 'El dictado necesita señal.' : '';
+        if (m) { avisado = true; aviso(m, true); fase('aviso', m); }
+        else if (ev.error === 'aborted') r.manual = true;        // lo abortaron (parar, cerrar): sin "no te entendí"
+      };
+      r.onend = function () {
+        if (terminado) return; terminado = true; clearTimeout(silencio); clearTimeout(vigia);
+        if (rec === r) rec = null; escuchando = false; bMic.classList.remove('on'); input.placeholder = opc.placeholder || 'Precio, stock, cliente, pendientes…';
+        var t = (fin || parcial || input.value).trim();
+        if (t) { fase('pensando'); input.value = ''; procesar(t); if (!hablandoAhora) fase(''); }
+        else if (avisado || r.manual) fase('');
+        else fase('aviso', 'No te entendí. Toca el micrófono y repite.');
+      };
       fase('escuchando');                                       // la esfera aparece al tocar, no cuando el navegador confirma (30-09)
-      try { r.start(); } catch (e) { if (rec === r) rec = null; fase(''); }
+      try { r.start(); } catch (e) { if (rec === r) rec = null; fase(''); return; }
+      vigia = setTimeout(function () { if (!terminado && !escuchando) { avisado = true; var m = 'No pude activar el micrófono. Toca y prueba de nuevo.'; aviso(m, true); fase('aviso', m); try { r.abort(); } catch (e) {} setTimeout(function () { if (!terminado) r.onend(); }, TIEMPOS.forzar); } }, TIEMPOS.arranque);
     }
-    function parar() { if (rec) { try { rec.abort(); } catch (e) {} } }
+    function parar() { if (rec) { rec.manual = true; try { rec.abort(); } catch (e) {} } }
     if (micPermitido) { bMic.hidden = false; bMic.onclick = function () { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); }; }
     else if (opc.pwa) { bMic.hidden = false; bMic.title = 'Hablar (abre Voz Refrichile)'; bMic.setAttribute('aria-label', 'Hablar (abre Voz Refrichile)'); bMic.onclick = function () { raiz.open(opc.pwa + '?mic=1', '_blank', 'noopener'); }; }
 
@@ -509,7 +532,7 @@
 
     return {
       consultar: procesar, refrescar: function () { pedirDatos(true); }, enfocar: function () { input.focus(); },
-      datos: datos, cartera: cartera, puedeOir: micPermitido, escuchar: function () { if (micPermitido) { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); } }, parar: parar,
+      datos: datos, cartera: cartera, puedeOir: micPermitido, escuchar: function () { if (micPermitido) { if (raiz.speechSynthesis) speechSynthesis.cancel(); escuchar(); } }, parar: parar, tiempos: TIEMPOS,
       destruir: function () { clearInterval(reloj); el.innerHTML = ''; el.classList.remove('vc'); }
     };
   }
