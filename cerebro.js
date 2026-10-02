@@ -189,9 +189,15 @@
     // 4) "cuando tengo que...", "a que hora": se contesta con los pendientes
     if (/\b(cuando|a que hora|que dia|para cuando|para que dia)\b/.test(n) && !M.R.record.test(n) && !/\b(anota|apunta|agenda)/.test(n) && !M.R.compras.test(n) && !M.R.ventas.test(n)
       && !M.R.gestiones.test(n) && !M.R.docs.test(n) && !M.R.cotvend.test(n) && !M.R.comparar.test(n) && !M.esPasado(texto)) return this.cuando(t2);
+    // "mas" / "ver mas": el ultimo analisis con mas filas (02-10)
+    if (this.ult.analisis && /^\s*(mas|más|ver mas|ver más|otros|siguientes|dame mas|dame más|muestrame mas|muéstrame más|los demas|los demás)\s*$/i.test(texto)) {
+      var ra = this.ult.analisis, selfM = this; ra.n = (ra.n || 10) + 10;
+      return this.conVentas(function () { var vm = M.vista(ra, selfM.datos); return { dicho: vm.filas.length ? 'Van ' + vm.filas.length + '. ' + vm.dicho : 'No hay más.', tarjeta: vm }; }, true);
+    }
     var r = M.interpretar(t2, { datos: this.datos, cartera: this.cartera });
+    if (r.tipo === 'analisis') this.ult.analisis = r; else if (r.tipo !== 'saludo' && r.tipo !== 'ayuda') this.ult.analisis = null;
     if (r.tipo === 'saludo' || r.tipo === 'ayuda') return this._atenderTipo(r.tipo, n);
-    if (r.tipo === 'pend') return this.decirPendientes();
+    if (r.tipo === 'pend') { var selfP = this; return { dicho: this.decirPendientes(), tarjeta: this.pend.length ? { titulo: 'Pendientes · ' + this.pend.length, etiqueta: '', nombre: '', nota: '', filas: this.pend.slice(0, 10).map(function (t) { return { n: t.titulo, s: t.cliente || '', v: selfP.cuandoTxt(t), vs: t.dias != null && t.dias < 0 ? 'vencida' : '' }; }) } : null }; }
     if (r.tipo === 'ventas' || r.tipo === 'meta') return this.decirVentas(r.tipo, r.periodo);
     if (r.tipo === 'analisis') { var selfA = this; return this.conVentas(function () { var va = M.vista(r, selfA.datos); return { dicho: va.dicho, tarjeta: va }; }, true); }   // tarjeta: la pantalla de chat la pinta
     if (r.tipo === 'riesgo' || r.tipo === 'mejores') { var self0 = this; return this.conVentas(function () { return M.carteraTxt(r.sub, self0.datos.cartera(r.sub)); }); }
@@ -199,17 +205,18 @@
     if (r.tipo === 'gestiones') {
       if (r.cli) this.ult.cli = r.cli;
       if (!r.resultado) return 'Todavía no tengo las gestiones en el teléfono; dame unos segundos.';
-      return r.cli ? M.gestionesTxt(r.cli.n, r.resultado) : M.gestPeriodoTxt(r.periodo, r.resultado, this.datos.todos);
+      return { dicho: r.cli ? M.gestionesTxt(r.cli.n, r.resultado) : M.gestPeriodoTxt(r.periodo, r.resultado, this.datos.todos), tarjeta: M.vista(r, this.datos) };
     }
-    if (r.tipo === 'nv') { if (r.cli) this.ult.cli = r.cli; return M.nvTxt(r.sub, r.resultado || [], r.cli ? r.cli.n : '', !this.datos.nv); }
+    if (r.tipo === 'nv') { if (r.cli) this.ult.cli = r.cli; return { dicho: M.nvTxt(r.sub, r.resultado || [], r.cli ? r.cli.n : '', !this.datos.nv), tarjeta: r.resultado ? M.vista(r, this.datos) : null }; }
     if (r.tipo === 'cotvend' || r.tipo === 'comparar' || r.tipo === 'docs') {
       var selfV = this; if (r.cli) this.ult.cli = r.cli;
       return this.conVentas(function () {
-        var d = selfV.datos;
+        var d = selfV.datos, tx = (function () {
         if (r.tipo === 'cotvend') return r.cli ? M.cotHistCliTxt(r.cli.n, d.cotHist(r.cli.r)) : M.cotHistTxt(d.ventas, r.periodo);
         if (r.tipo === 'comparar') return r.cli ? M.comparaCliTxt(r.cli.n, d.comprasDe(r.cli.r)) : M.comparaTxt(d.ventas);
         if (r.cli) return M.docsTxt(r.cli.n, d.docsDe(r.cli.r));
         return r.folio ? M.docFolioTxt(d.docPorFolio(r.folio), r.folio) : M.docsPeriodoTxt(r.periodo, d.docsPeriodo(r.periodo), d.todos);
+        })(); return { dicho: tx, tarjeta: M.vista(r, d) };               // la tarjeta la pinta la pantalla de chat
       }, true);
     }
     if (r.tipo === 'cotizado') {
