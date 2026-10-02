@@ -50,8 +50,8 @@
   // ---------------------------------------------------------------- voz
   function elegirVoz() { var vs = (window.speechSynthesis && speechSynthesis.getVoices()) || []; VOZ = vs.filter(function (v) { return /^es[-_]CL/i.test(v.lang); })[0] || vs.filter(function (v) { return /^es/i.test(v.lang); })[0] || null; }
   if (window.speechSynthesis) { elegirVoz(); speechSynthesis.onvoiceschanged = elegirVoz; }
-  function decir(t) {
-    if (!TTS || !window.speechSynthesis || !t) return;
+  function decir(t, fuerza) {                                     // fuerza: la pregunta entro por voz, se contesta por voz
+    if ((!TTS && !fuerza) || !window.speechSynthesis || !t) return;
     try { speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance(t.replace(/\$/g, '').replace(/(\d)\.(\d{3})/g, '$1$2')); u.lang = 'es-CL'; if (VOZ) u.voice = VOZ; u.rate = 1.05; speechSynthesis.speak(u); } catch (e) {}
   }
   $('tts').className = TTS ? 'on' : ''; $('tts').onclick = function () { TTS = !TTS; alm.set('chat_tts', TTS); this.className = TTS ? 'on' : ''; if (!TTS && window.speechSynthesis) speechSynthesis.cancel(); };
@@ -81,7 +81,7 @@
       ocupado = false; p.remove();
       if (!r.dicho) return;
       burbuja('a', r.dicho); var v = r.tarjeta || null; if (v || r.tel) tarjeta(v || { titulo: '', filas: [] }, r.tel); guardar('a', r.dicho, v, r.tel);
-      if (TTS || porVoz) decir(r.dicho);
+      decir(r.dicho, porVoz);
       if (r.seguir) txt.focus();
     }, function (e) { ocupado = false; p.remove(); aviso('Algo falló: ' + (e && e.message || e)); });
   }

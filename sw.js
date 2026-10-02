@@ -1,6 +1,6 @@
 /* Voz Refrichile: la app abre aunque no haya senal. Se guarda solo la cascara (pagina,
    codigo e iconos); los datos siempre van a la API. Cambiar VERSION al publicar. */
-var VERSION = 'voz-2610020122';
+var VERSION = 'voz-2610020124';
 var CASCARA = ['./', 'index.html', 'app.js', 'voz.html', 'voz.js', 'motor.js', 'analisis.js', 'cerebro.js', 'chat.html', 'chat.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(CASCARA); })); self.skipWaiting(); });
 self.addEventListener('activate', function (e) {

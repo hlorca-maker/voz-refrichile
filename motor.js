@@ -371,6 +371,7 @@
     var eq = v.equipo && v.vendedores ? ' ' + v.vendedores.map(function (x) { return x.nombre.split(' ')[0] + ' ' + M.plataTxt(x.mes) + (x.meta ? ' (' + (x.avance || 0) + '%)' : ''); }).join(', ') + '.' : '';
     var anio = ' En el año, ' + M.plataTxt(v.anio) + '.';
     if (tipo === 'meta' && M.analisis && v.meta && v.falta > 0) meta += ' ' + M.analisis.ritmoCorto(v);   // ritmo necesario vs actual (01-10)
+    if (tipo !== 'meta' && v.mesP) lleva += ' Es ' + M.variaTxt(v.mes, v.mesP) + ' al mismo día.';       // el porque: contra el ano pasado (02-10)
     return tipo === 'meta' ? meta + ' ' + lleva + eq + anio : lleva + ' ' + meta + eq + anio;
   };
   // Que decir de lo cotizado a un cliente.
