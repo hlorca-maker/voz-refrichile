@@ -193,7 +193,7 @@
     if (r.tipo === 'saludo' || r.tipo === 'ayuda') return this._atenderTipo(r.tipo, n);
     if (r.tipo === 'pend') return this.decirPendientes();
     if (r.tipo === 'ventas' || r.tipo === 'meta') return this.decirVentas(r.tipo, r.periodo);
-    if (r.tipo === 'analisis') { var selfA = this; return this.conVentas(function () { return M.vista(r, selfA.datos).dicho; }, true); }
+    if (r.tipo === 'analisis') { var selfA = this; return this.conVentas(function () { var va = M.vista(r, selfA.datos); return { dicho: va.dicho, tarjeta: va }; }, true); }   // tarjeta: la pantalla de chat la pinta
     if (r.tipo === 'riesgo' || r.tipo === 'mejores') { var self0 = this; return this.conVentas(function () { return M.carteraTxt(r.sub, self0.datos.cartera(r.sub)); }); }
     if (r.tipo === 'compras') { var self1 = this; this.ult.cli = r.cli; return this.conVentas(function () { return M.comprasTxt(r.cli.n, self1.datos.comprasDe(r.cli.r)); }); }
     if (r.tipo === 'gestiones') {

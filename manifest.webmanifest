@@ -15,6 +15,7 @@
     { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
+    { "name": "Chat (preguntas y análisis)", "short_name": "Chat", "url": "./chat.html", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Hablar", "short_name": "Hablar", "url": "./voz.html?mic=1", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Mis pendientes de hoy", "short_name": "Pendientes", "url": "./?modo=pendientes", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Pantalla (escribir)", "short_name": "Pantalla", "url": "./", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }

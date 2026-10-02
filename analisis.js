@@ -77,6 +77,16 @@
     return s.join(' ');
   }
 
+  // Una frase de ritmo para colgar de "cuanto me falta para la meta" (M.ventasTxt): lo que hay que vender por dia habil
+  // contra lo que se viene vendiendo, y si asi se llega.
+  A.ritmoCorto = function (v, hoy) {
+    if (!v || !v.meta || !(v.falta > 0)) return '';
+    var dh = A.diasHabiles(hoy || M.hoy0()), ritmo = dh.transcurridos ? (v.mes || 0) / dh.transcurridos : 0, proy = ritmo * dh.total;
+    if (!dh.restantes) return 'Hoy es el último día hábil del mes.';
+    var req = v.falta / dh.restantes;
+    return 'Quedan ' + dh.restantes + (dh.restantes === 1 ? ' día hábil' : ' días hábiles') + ': hay que vender ' + P(req) + ' por día, y el ritmo actual es ' + P(ritmo) + ' por día. ' + (proy >= v.meta ? 'A este ritmo se llega.' : proy >= v.meta * .9 ? 'Va justo.' : 'A este ritmo no se llega: hay que subir ' + Math.round((req / (ritmo || 1) - 1) * 100) + ' por ciento.');
+  };
+
   // ---------------------------------------------------------------- cartera: caídas, pareto, riesgo, sin gestión, nuevos, reactivar
   A.caida = function (datos, opc) {
     var hoy = hoy0(opc), ug = ultimaGestion(datos), cp = cotsPorRut(datos);

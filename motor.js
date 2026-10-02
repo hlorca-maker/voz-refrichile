@@ -370,6 +370,7 @@
     var meta = v.meta ? ((v.equipo ? 'La meta del equipo es ' : 'Tu meta es ') + M.plataTxt(v.meta) + ': ' + (v.falta > 0 ? (v.equipo ? 'faltan ' : 'te faltan ') + M.plataTxt(v.falta) + ' (' + v.avance + ' por ciento)' : 'ya está cumplida (' + v.avance + ' por ciento)') + (v.falta > 0 && quedan ? ', con ' + quedan + (quedan === 1 ? ' día' : ' días') + ' por delante' : '') + '.') : (v.equipo ? 'No hay meta cargada este mes.' : 'No tienes meta cargada para este mes.');
     var eq = v.equipo && v.vendedores ? ' ' + v.vendedores.map(function (x) { return x.nombre.split(' ')[0] + ' ' + M.plataTxt(x.mes) + (x.meta ? ' (' + (x.avance || 0) + '%)' : ''); }).join(', ') + '.' : '';
     var anio = ' En el año, ' + M.plataTxt(v.anio) + '.';
+    if (tipo === 'meta' && M.analisis && v.meta && v.falta > 0) meta += ' ' + M.analisis.ritmoCorto(v);   // ritmo necesario vs actual (01-10)
     return tipo === 'meta' ? meta + ' ' + lleva + eq + anio : lleva + ' ' + meta + eq + anio;
   };
   // Que decir de lo cotizado a un cliente.
@@ -747,6 +748,7 @@
       : /\b(ranking|cada (vendedor|uno)|quien va|vendedor(es)?|equipo)\b/.test(n) && !/\b(actividad|gestiones)\b/.test(n) ? 'ranking'
       : /\b(actividad|gestiones|cobertura|trabajando|haciendo)\b/.test(n) ? 'actividad'
       : 'ritmo';
+    if (sub === 'ranking' && datos && !datos.todos) sub = 'ritmo';                  // un vendedor no ve al equipo: su propio ritmo
     var r = { sub: sub, periodo: / (mes|mensual|este mes|del mes) /.test(n) ? 'mes' : / (ano|anual|este ano|del ano) /.test(n) ? 'anio' : (sub === 'actividad' ? 'semana' : ''), vendedor: '' };
     var md = n.match(/ (\d{2,3}) dias /); if (md) r.dias = +md[1];
     var mn = n.match(/ (top |los |las |primer[oa]s )?(\d{1,2}) (clientes|cotizaciones|productos|mayores|mejores|primer[oa]s) /); if (mn) r.n = +mn[2];

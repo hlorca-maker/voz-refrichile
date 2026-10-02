@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1220">
+<title>Voz Refrichile · Chat</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{--bg:#0B1220;--panel:#121C2E;--burb:#1B2A44;--mia:#0A6FE8;--txt:#E8EEF8;--mut:#8EA0BF;--acc:#3B9BFF;--ok:#2FBF71;--warn:#F3B13F;--err:#FF6B6B;--bord:#223250}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,"Segoe UI",Roboto,sans-serif}
+body{display:flex;flex-direction:column;height:100dvh}
+header{display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));background:var(--panel);border-bottom:1px solid var(--bord)}
+header .logo{width:36px;height:36px;border-radius:10px;background:var(--mia);display:grid;place-items:center;flex:none}
+header .logo svg{width:20px;height:20px;fill:#fff}
+header b{font-size:16px;display:block}header .pie{font-size:12px;color:var(--mut)}
+header .pie.ok{color:var(--ok)}header .pie.warn{color:var(--warn)}header .pie.err{color:var(--err)}
+header .sp{flex:1}
+header button{border:0;background:transparent;color:var(--mut);font-size:13px;padding:6px 8px;border-radius:8px;cursor:pointer}
+header button.on{color:var(--acc)}
+#hilo{flex:1;overflow:auto;padding:12px 12px 4px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+.m{max-width:88%;padding:10px 13px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word;font-size:15.5px}
+.m.u{align-self:flex-end;background:var(--mia);color:#fff;border-bottom-right-radius:4px}
+.m.a{align-self:flex-start;background:var(--burb);border-bottom-left-radius:4px}
+.m.a.pensando{color:var(--mut);font-style:italic}
+.m .hora{display:block;font-size:11px;color:rgba(255,255,255,.55);margin-top:4px;text-align:right}
+.card{align-self:stretch;background:var(--panel);border:1px solid var(--bord);border-radius:14px;padding:10px 12px;margin-left:0}
+.card h3{margin:0 0 6px;font-size:14px;color:var(--acc);display:flex;justify-content:space-between;gap:8px}
+.card h3 .tag{font-weight:400;color:var(--mut);font-size:12px}
+.card .nom{font-weight:700;font-size:16px;margin-bottom:6px}
+.fila{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--bord);font-size:14px}
+.fila:first-of-type{border-top:0}
+.fila .n{font-weight:600}.fila .s{color:var(--mut);font-size:12.5px;margin-top:2px}
+.fila .v{text-align:right;white-space:nowrap;font-weight:600}.fila .vs{text-align:right;color:var(--mut);font-size:12px;white-space:nowrap}
+.fila.link{cursor:pointer}
+.card .nota{color:var(--mut);font-size:12.5px;margin-top:6px}
+.card .tel{display:inline-block;margin-top:8px;padding:8px 14px;border-radius:999px;background:var(--ok);color:#fff;text-decoration:none;font-weight:600}
+#chips{display:flex;gap:8px;overflow-x:auto;padding:6px 12px;scrollbar-width:none}
+#chips::-webkit-scrollbar{display:none}
+#chips button{flex:none;border:1px solid var(--bord);background:var(--panel);color:var(--txt);border-radius:999px;padding:7px 12px;font-size:13.5px;cursor:pointer}
+form{display:flex;gap:8px;padding:8px 12px calc(10px + env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--bord)}
+form input{flex:1;min-width:0;border:1px solid var(--bord);background:var(--bg);color:var(--txt);border-radius:999px;padding:11px 16px;font-size:16px;outline:none}
+form button{border:0;border-radius:50%;width:44px;height:44px;flex:none;display:grid;place-items:center;cursor:pointer;background:var(--burb);color:#fff}
+form button svg{width:22px;height:22px;fill:currentColor}
+form button.mic.on{background:var(--err);animation:lat 1s ease-in-out infinite}
+form button.enviar{background:var(--mia)}
+@keyframes lat{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.aviso{align-self:center;color:var(--mut);font-size:12.5px;text-align:center;padding:4px 10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg></div>
+  <div><b>Voz Refrichile</b><span class="pie" id="pie">Cargando datos…</span></div>
+  <div class="sp"></div>
+  <button type="button" id="tts" title="Leer las respuestas en voz alta">🔊</button>
+  <button type="button" id="nueva" title="Conversación nueva">Nueva</button>
+</header>
+<div id="hilo" aria-live="polite"></div>
+<div id="chips"></div>
+<form id="f" autocomplete="off">
+  <input id="txt" type="text" placeholder="Pregunta o dicta…" enterkeyhint="send" autocapitalize="off" aria-label="Pregunta">
+  <button type="button" class="mic" id="mic" aria-label="Hablar"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg></button>
+  <button type="submit" class="enviar" aria-label="Enviar"><svg viewBox="0 0 24 24"><path d="M3 20v-6l9-2-9-2V4l19 8z"/></svg></button>
+</form>
+<script src="motor.js"></script>
+<script src="analisis.js"></script>
+<script src="cerebro.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
