@@ -251,7 +251,7 @@
   };
   C.prototype._atenderTipo = function (tipo, n) {
     if (tipo === 'saludo') return this.saludo(n);
-    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección, lo cotizado, lo comprado, las facturas y las gestiones de un cliente; tus ventas de hoy, la semana y el mes, tu meta, cómo vas contra el año pasado y cuántas cotizaciones has vendido o perdido; qué clientes llevan tiempo sin comprar; tus pendientes; y registrar gestiones, recordatorios, tareas y notas. Por ejemplo: llamé a Clima Norte y quedó en enviar la orden; qué hablé con Refritec; cómo voy respecto al año pasado; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
+    return { dicho: 'Puedo decirte el precio y el stock de un producto; el teléfono, la dirección, lo cotizado, lo comprado, las facturas y las gestiones de un cliente; tus ventas de hoy, la semana y el mes, tu meta, cómo vas contra el año pasado y cuántas cotizaciones has vendido o perdido; qué clientes llevan tiempo sin comprar; tus pendientes; y registrar gestiones, recordatorios, tareas y notas. También análisis con razones: a qué ritmo vas con la meta, qué clientes cayeron, pareto, clientes sin gestión, el pipeline, qué cotizaciones empujar, tasa de cierre, stock crítico, actividad del equipo y cómo va cada vendedor. Por ejemplo:llamé a Clima Norte y quedó en enviar la orden; qué hablé con Refritec; cómo voy respecto al año pasado; o recuérdame llamar a Frío Sur mañana a las 10. ¿Qué necesitas?', seguir: true };
   };
   // Ventas, meta, compras y cartera salen de la accion "ventas" (viene con la copia); si aun no esta, se pide ahora.
   C.prototype.conVentas = function (fn, nuevo) {
